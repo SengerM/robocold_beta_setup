@@ -1,0 +1,5 @@
+slot_number,device_name,position_long_stage,position_short_stage,The_Castle_channel_number,caen_serial_number,caen_channel_number
+1,HPK-2,395,223,1,139,2
+2,MS33,2995,223,2,13398,2
+3,MS27,5695,223,3,139,0
+4,HPK-4,8395,223,4,13398,3
