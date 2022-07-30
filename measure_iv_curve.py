@@ -1,7 +1,6 @@
 from bureaucrat.SmarterBureaucrat import SmarterBureaucrat # https://github.com/SengerM/bureaucrat
 from pathlib import Path
 import pandas
-import numpy as np
 import datetime
 import time
 import plotly.graph_objects as go
@@ -137,7 +136,7 @@ if __name__ == '__main__':
 				voltages = self.voltages_to_measure, 
 				slot_number = self.slot_number, 
 				n_measurements_per_voltage = self.n_measurements_per_voltage, 
-				silent = False,
+				silent = True,
 			)
 	
 	VOLTAGES = {
@@ -168,14 +167,45 @@ if __name__ == '__main__':
 				name = f'IV measuring thread for slot {slot_number}',
 				slot_number = slot_number,
 				the_setup = the_setup,
-				voltages_to_measure = numpy.linspace(0,VOLTAGES[slot_number],5),
+				voltages_to_measure = numpy.linspace(0,VOLTAGES[slot_number],111),
 				n_measurements_per_voltage = 11,
 				directory_to_store_data = Richard.path_to_submeasurements_directory,
 			)
 			threads.append(thread)
+		
+		print(f'Moving the beta source outside all detectors...')
+		the_setup.place_source_such_that_it_does_not_irradiate_any_DUT()
 		
 		for thread in threads:
 			thread.start()
 		
 		while any([thread.is_alive() for thread in threads]):
 			time.sleep(1)
+		
+		measured_data_list = []
+		for path_to_submeasurement in Richard.path_to_submeasurements_directory.iterdir():
+			measured_data_list.append(
+				load_whole_dataframe(path_to_submeasurement/Path('measure_iv_curve/measured_data.sqlite')).reset_index(),
+			)
+		measured_data_df = pandas.concat(measured_data_list, ignore_index=True)
+		measured_data_df['Bias voltage (V)'] *= -1
+		grouped_thing = measured_data_df.groupby(['device_name','n_voltage'])
+		averaged_data_df = grouped_thing.mean()
+		standard_deviation_data_df = grouped_thing.std()
+		for col in {'Bias voltage (V)','Bias current (A)'}:
+			averaged_data_df[f'{col} error'] = standard_deviation_data_df[col]
+		averaged_data_df.reset_index(inplace=True)
+		fig = px.line(
+			averaged_data_df.sort_values('n_voltage'),
+			x = 'Bias voltage (V)',
+			y = 'Bias current (A)',
+			error_y = 'Bias current (A) error',
+			error_x = 'Bias voltage (V) error',
+			color = 'device_name',
+			markers = True,
+			title = f'IV curves<br><sup>Measurement: {Richard.measurement_name}</sup>',
+		)
+		fig.write_html(
+			str(Richard.path_to_default_output_directory/Path('iv_curves_measured.html')),
+			include_plotlyjs = 'cdn',
+		)
