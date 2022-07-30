@@ -160,6 +160,10 @@ if __name__ == '__main__':
 	print(the_setup.configuration_df)
 	
 	with Richard.do_your_magic():
+		the_setup.configuration_df.to_csv(Richard.path_to_default_output_directory/Path('setup_configuration.csv'))
+		with open(Richard.path_to_default_output_directory/Path('setup_description.txt'), 'w') as ofile:
+			print(the_setup.description, file=ofile)
+		
 		threads = []
 		for slot_number in VOLTAGES.keys():
 			the_setup.set_current_compliance(slot_number=slot_number, amperes=10e-6)
