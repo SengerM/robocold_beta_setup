@@ -235,6 +235,7 @@ class TheRobocoldBetaSetup:
 if __name__ == '__main__':
 	import time
 	import threading
+	import numpy
 	
 	exit_flag = False
 	
@@ -248,7 +249,7 @@ if __name__ == '__main__':
 			with self.the_setup.lock_bias_for_slot[self.slot_number]:
 				while not exit_flag:
 					print(f'{self.name}: {self.the_setup.measure_bias_voltage(slot_number)} V, {self.the_setup.measure_bias_current(slot_number)} A')
-					time.sleep(1)
+					time.sleep(numpy.random.random())
 	
 	the_setup = TheRobocoldBetaSetup(
 		path_to_configuration_file = Path('configuration.csv')
@@ -257,21 +258,34 @@ if __name__ == '__main__':
 	print(the_setup.description)
 	print(the_setup.configuration_df)
 	
-	SLOTS_TO_MEASURE = [2]
+	SLOTS_TO_MEASURE = [1,2]
 	VOLTAGES = {
 		1: 333,
 		2: 500,
 	}
 	
+	threads = []
 	for slot_number in SLOTS_TO_MEASURE:
-		print(f'Slot {slot_number}...')
-		print(f'\tMoving...')
-		the_setup.move_to_slot(slot_number)
-		print('\tConnecting the slot to the oscilloscope...')
-		the_setup.connect_slot_to_oscilloscope(slot_number)
-		print(f'\tIn this slot we find device {the_setup.get_name_of_device_in_slot_number(slot_number)}')
-		print(f'\tSetting the bias voltage for this slot...')
-		the_setup.set_bias_voltage(slot_number, VOLTAGES[slot_number])
-		print(f'\tMeasured bias voltage = {the_setup.measure_bias_voltage(slot_number)} V')
-		print(f'\tMeasured bias current = {the_setup.measure_bias_current(slot_number)} A')
-		print(f'\tT = {the_setup.temperature:.2f} °C, H = {the_setup.humidity:.2f} %RH')
+		thread = IVRealTimeMeasure(
+			name = f'IV measuring thread for slot {slot_number}',
+			slot_number = slot_number,
+			the_setup = the_setup,
+		)
+		threads.append(thread)
+	threads.append(
+		IVRealTimeMeasure(
+			name=f'IV parasitic thread',
+			slot_number = 1,
+			the_setup = the_setup,
+		)
+	)
+	for thread in threads:
+		thread.start()
+	
+	for k in range(10):
+		time.sleep(1)
+	exit_flag = True
+	
+	while any([thread.is_alive() for thread in threads]):
+		print(f'Waiting for threads to finish...')
+		time.sleep(1)
