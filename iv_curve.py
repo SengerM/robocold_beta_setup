@@ -7,9 +7,9 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 from TheSetup import TheRobocoldBetaSetup
-import datetime
 from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import threading
+import warnings
 
 def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, voltages:list, slot_number:int, n_measurements_per_voltage:int, silent=False):
 	"""Measure an IV curve.
@@ -43,7 +43,12 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 				for n_voltage,voltage in enumerate(voltages):
 					if not silent:
 						print(f'Measuring n_voltage={n_voltage}/{len(voltages)-1}...')
-					the_setup.set_bias_voltage(slot_number, voltage)
+					try:
+						the_setup.set_bias_voltage(slot_number, voltage)
+					except ValueError as e:
+						if str(e) == 'Cannot apply this voltage due to hardware limitations.':
+							warnings.warn(f'Cannot measure slot {slot_number} at voltage {voltage}, reason: `{e}`, will terminate this IV curve measurement.')
+							break # Finish the measurement here, not much more we can do...
 					for n_measurement in range(n_measurements_per_voltage):
 						elapsed_seconds = 9999999999
 						while elapsed_seconds > 5: # Because of multiple threads locking the different elements of the_setup, it can happen that this gets blocked for a long time. Thus, the measured data will no longer belong to a single point in time as we expect...:
@@ -242,15 +247,24 @@ if __name__=='__main__':
 	import numpy
 	
 	SLOTS = [1,2,3,4,5,6]
-	VOLTAGES = {slot: numpy.linspace(0,500,5) for slot in SLOTS}
+	VOLTAGES = {slot: numpy.linspace(0,777,222) for slot in SLOTS}
 	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}
+	
+	the_setup = TheRobocoldBetaSetup(Path('configuration.csv'))
 	
 	measure_iv_curve_multiple_slots(
 		path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'),
 		measurement_name = input('Measurement name? '),
-		the_setup = TheRobocoldBetaSetup(Path('configuration.csv')), 
+		the_setup = the_setup,
 		voltages = VOLTAGES,
 		current_compliances = CURRENT_COMPLIANCES,
 		n_measurements_per_voltage = 11,
 		silent = False,
 	)
+	
+	print('Waiting voltages to go down to 0...')
+	for slot in SLOTS:
+		the_setup.set_bias_voltage(slot_number=slot, volts=0, block_until_not_ramping_anymore=False)
+	time.sleep(1)
+	while any([the_setup.is_ramping_bias_voltage(slot_number) for slot_number in SLOTS]):
+		time.sleep(1)
