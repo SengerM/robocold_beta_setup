@@ -92,7 +92,7 @@ class TheRobocoldBetaSetup:
 		with self._caen_Lock:
 			return caen_channel.V_mon
 	
-	def set_bias_voltage(self, slot_number:int, volts:float, freeze_until_not_ramping_anymore:bool=True):
+	def set_bias_voltage(self, slot_number:int, volts:float, block_until_not_ramping_anymore:bool=True):
 		"""Set the bias voltage for the given slot.
 		
 		Parameters
@@ -104,19 +104,27 @@ class TheRobocoldBetaSetup:
 		freeze_until_not_ramping_anymore: bool, default True
 			If `True`, the method will hold the execution frozen until the
 			CAEN says it has stopped ramping the voltage. If `False`, returns
-			immediately after setting the voltage.
+			immediately after setting the voltage. This function is "thread
+			friendly" in the sense that it will not block the whole access
+			to the CAEN power supplies while it waits for the ramping to
+			stop. Yet it is thread safe.
 		"""
 		if not isinstance(volts, (int, float)):
 			raise TypeError(f'`volts` must be a float number, received object of type {type(volts)}.')
-		if not isinstance(freeze_until_not_ramping_anymore, bool):
-			raise TypeError(f'`freeze_until_not_ramping_anymore` must be boolean.')
+		if not isinstance(block_until_not_ramping_anymore, bool):
+			raise TypeError(f'`block_until_not_ramping_anymore` must be boolean.')
 		with self._bias_for_slot_Lock[slot_number]: # Act only if the slot is free.
 			caen_channel = self._caen_channel_given_slot_number(slot_number)
 			with self._caen_Lock:
-				if freeze_until_not_ramping_anymore:
-					caen_channel.ramp_voltage(voltage=volts)
-				else:
-					caen_channel.V_set = volts
+				caen_channel.V_set = volts
+			if block_until_not_ramping_anymore:
+				time.sleep(1) # It takes a while for the CAEN to realize that it has to change the voltage...
+				while True:
+					with self._caen_Lock:
+						if caen_channel.is_ramping == False:
+							break
+					sleep(1)
+				sleep(3) # Empirically, after CAEN says it is not ramping anymore, you have to wait 3 seconds to be sure it actually stopped ramping...
 	
 	def measure_bias_current(self, slot_number:int)->float:
 		"""Measures the bias current for the given slot."""
@@ -277,27 +285,30 @@ if __name__ == '__main__':
 	import time
 	import threading
 	import numpy
+	from measure_iv_curve import script_core as measure_iv_curve
 	
 	exit_flag = False
 	
-	class IVRealTimeMeasure(threading.Thread):
-		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup, voltage_to_measure:float):
+	class MeasureIVCurve(threading.Thread):
+		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup, voltages_to_measure:list, n_measurements_per_voltage:int):
 			threading.Thread.__init__(self)
 			self.name = name
 			self.slot_number = slot_number
 			self.the_setup = the_setup
-			self.voltage_to_measure = voltage_to_measure
+			self.voltages_to_measure = voltages_to_measure
+			self.n_measurements_per_voltage = n_measurements_per_voltage
 		def run(self):
-			with self.the_setup.hold_control_of_bias_for_slot_number(self.slot_number):
-				print(f'Setting bias voltage {self.voltage_to_measure} V to slot {self.slot_number}...')
-				self.the_setup.set_bias_voltage(slot_number=self.slot_number, volts=self.voltage_to_measure)
-				while not exit_flag:
-					print(f'{self.name}: {self.the_setup.measure_bias_voltage(self.slot_number)} V, {self.the_setup.measure_bias_current(self.slot_number)} A')
-					time.sleep(numpy.random.random())
+			print(f'Starting thread {self.name} to measure device {the_setup.get_name_of_device_in_slot_number(self.slot_number)}...')
+			measure_iv_curve(
+				directory = Path.home()/Path('measurements_data')/Path(f'IV_curve_{the_setup.get_name_of_device_in_slot_number(self.slot_number)}'),
+				the_setup = self.the_setup, 
+				voltages = self.voltages_to_measure, 
+				slot_number = self.slot_number, 
+				n_measurements_per_voltage = self.n_measurements_per_voltage, 
+				silent = False,
+			)
 	
-	the_setup = TheRobocoldBetaSetup(
-		path_to_configuration_file = Path('configuration.csv')
-	)
+	the_setup = TheRobocoldBetaSetup(path_to_configuration_file = Path('configuration.csv'))
 	
 	print(the_setup.description)
 	print(the_setup.configuration_df)
@@ -310,30 +321,17 @@ if __name__ == '__main__':
 	
 	threads = []
 	for slot_number in SLOTS_TO_MEASURE:
-		thread = IVRealTimeMeasure(
+		thread = MeasureIVCurve(
 			name = f'IV measuring thread for slot {slot_number}',
 			slot_number = slot_number,
 			the_setup = the_setup,
-			voltage_to_measure = VOLTAGES[slot_number],
+			voltages_to_measure = numpy.linspace(0,VOLTAGES[slot_number],5),
+			n_measurements_per_voltage = 11,
 		)
 		threads.append(thread)
-	threads.append(
-		IVRealTimeMeasure(
-			name=f'IV parasitic thread',
-			slot_number = 1,
-			the_setup = the_setup,
-			voltage_to_measure = 444,
-		)
-	)
+	
 	for thread in threads:
 		thread.start()
 	
-	try:
-		while True:
-			time.sleep(1)
-	except:
-		exit_flag = True
-	finally:
-		while any([thread.is_alive() for thread in threads]):
-			print(f'Waiting for threads to finish...')
-			time.sleep(1)
+	while any([thread.is_alive() for thread in threads]):
+		time.sleep(1)
