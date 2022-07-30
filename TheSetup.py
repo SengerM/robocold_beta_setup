@@ -9,7 +9,9 @@ from pathlib import Path
 import pandas
 
 class TheRobocoldBetaSetup:
-	"""This class wraps all the hardware so if there are changes it is easy to adapt."""
+	"""This class wraps all the hardware so if there are changes it is 
+	easy to adapt. It should be thread safe.
+	"""
 	def __init__(self, path_to_configuration_file:Path):
 		"""
 		"""
@@ -17,21 +19,26 @@ class TheRobocoldBetaSetup:
 			raise TypeError(f'`configuration_file` must be of type {type(Path())}, received object of type {type(path_to_configuration_file)}.')
 		self.path_to_configuration_file = path_to_configuration_file
 		
-		self.oscilloscope = TeledyneLeCroyPy.LeCroyWaveRunner('USB0::0x05ff::0x1023::4751N40408::INSTR')
-		self.sensirion = EasySensirion.SensirionSensor()
-		self.caens = {
+		# Hardware elements ---
+		self._oscilloscope = TeledyneLeCroyPy.LeCroyWaveRunner('USB0::0x05ff::0x1023::4751N40408::INSTR')
+		self._sensirion = EasySensirion.SensirionSensor()
+		self._caens = {
 			'13398': CAENDesktopHighVoltagePowerSupply(ip='130.60.165.119'), # DT1470ET, the new one.
 			'139': CAENDesktopHighVoltagePowerSupply(ip='130.60.165.121'), # DT1419ET, the old one.
 		}
-		self.robocold = Robocold(find_Robocold_port().device)
-		self.rf_multiplexer = TheCastle(find_The_Castle_port().device)
+		self._robocold = Robocold(find_Robocold_port().device)
+		self._rf_multiplexer = TheCastle(find_The_Castle_port().device)
 		
-		# Threading locks ---
-		self._oscilloscope_Lock = threading.RLock()
+		# Threading locks for hardware ---
 		self._sensirion_Lock = threading.RLock()
 		self._caen_Lock = threading.RLock()
-		self._robocold_Lock = threading.RLock()
 		self._rf_multiplexer_Lock = threading.RLock()
+		
+		# Threading locks public ---
+		self.lock_oscilloscope = threading.RLock()
+		self.lock_robocold = threading.RLock()
+		self.lock_bias_for_slot = {slot_number: threading.RLock() for slot_number in self.configuration_df.index}
+		self.lock_signal_acquisition = threading.RLock() # Locks the oscilloscope and The Castle
 	
 	@property
 	def description(self) -> str:
@@ -41,7 +48,7 @@ class TheRobocoldBetaSetup:
 		instruments were you using."""
 		string =  'Instruments\n'
 		string += '-----------\n'
-		for instrument in [self.oscilloscope, self.sensirion, self.caens['13398'], self.caens['139'], self.robocold, self.rf_multiplexer]:
+		for instrument in [self._oscilloscope, self._sensirion, self._caens['13398'], self._caens['139'], self._robocold, self._rf_multiplexer]:
 			string += f'{instrument.idn}\n'
 		return string
 	
@@ -91,12 +98,13 @@ class TheRobocoldBetaSetup:
 			raise TypeError(f'`volts` must be a float number, received object of type {type(volts)}.')
 		if not isinstance(freeze_until_not_ramping_anymore, bool):
 			raise TypeError(f'`freeze_until_not_ramping_anymore` must be boolean.')
-		caen_channel = self._caen_channel_given_slot_number(slot_number)
-		with self._caen_Lock:
-			if freeze_until_not_ramping_anymore:
-				caen_channel.ramp_voltage(voltage=volts)
-			else:
-				caen_channel.V_set = volts
+		with self.lock_bias_for_slot[slot_number]: # Act only if the slot is free.
+			caen_channel = self._caen_channel_given_slot_number(slot_number)
+			with self._caen_Lock:
+				if freeze_until_not_ramping_anymore:
+					caen_channel.ramp_voltage(voltage=volts)
+				else:
+					caen_channel.V_set = volts
 	
 	def measure_bias_current(self, slot_number:int)->float:
 		"""Measures the bias current for the given slot."""
@@ -134,33 +142,34 @@ class TheRobocoldBetaSetup:
 		self._check_device_name(device_name)
 		if status not in {'on','off'}:
 			raise ValueError(f'`status` must be either "on" or "off", received {status}.')
-		caen_channel = self._caen_channel_given_slot_number(slot_number)
-		with self._caen_Lock:
-			caen_channel.output = status
+		with self.lock_bias_for_slot[slot_number]: # Act only if the slot is free.
+			caen_channel = self._caen_channel_given_slot_number(slot_number)
+			with self._caen_Lock:
+				caen_channel.output = status
 	
 	# Signal acquiring -------------------------------------------------
 	
 	def connect_slot_to_oscilloscope(self, slot_number:int):
 		"""Commute the RF multiplexer such that the device in the `slot_number`
 		gets connected to the oscilloscope."""
-		with self._rf_multiplexer_Lock:
-			self.rf_multiplexer.connect_channel(int(self.configuration_df.loc[slot_number,'The_Castle_channel_number']))
+		with self.lock_signal_acquisition:
+			self._rf_multiplexer.connect_channel(int(self.configuration_df.loc[slot_number,'The_Castle_channel_number']))
 	
 	def set_oscilloscope_vdiv(self, oscilloscope_channel_number:int, vdiv:float):
 		"""Set the vertical scale of the given channel in the oscilloscope."""
-		with self._oscilloscope_Lock:
-			self.oscilloscope.set_vdiv(channel=channel, vdiv=vdiv)
+		with self.lock_signal_acquisition:
+			self._oscilloscope.set_vdiv(channel=channel, vdiv=vdiv)
 			
 	def set_oscilloscope_trigger_threshold(self, level:float):
 		"""Set the threshold level of the trigger."""
-		with self._oscilloscope_Lock:
-			source = self.oscilloscope.get_trig_source()
-			self.oscilloscope.set_trig_level(trig_source=source, level=level)
+		with self.lock_signal_acquisition:
+			source = self._oscilloscope.get_trig_source()
+			self._oscilloscope.set_trig_level(trig_source=source, level=level)
 	
 	def wait_for_trigger(self):
 		"""Blocks execution until there is a trigger in the oscilloscope."""
-		with self._oscilloscope_Lock:
-			self.oscilloscope.wait_for_single_trigger()
+		with self.lock_signal_acquisition:
+			self._oscilloscope.wait_for_single_trigger()
 	
 	def get_waveform(self, oscilloscope_channel_number:int)->dict:
 		"""Gets a waveform from the oscilloscope.
@@ -175,9 +184,8 @@ class TheRobocoldBetaSetup:
 		waveform: dict
 			A dictionary of the form `{'Time (s)': np.array, 'Amplitude (V)': np.array}`.
 		"""
-		self._check_device_name(device_name)
-		with self._oscilloscope_Lock:
-			return self.oscilloscope.get_waveform(channel=self.devices_connections[device_name]['oscilloscope channel']) 
+		with self.lock_signal_acquisition:
+			return self._oscilloscope.get_waveform(channel=self.devices_connections[device_name]['oscilloscope channel']) 
 	
 	# Temperature and humidity sensor ----------------------------------
 	
@@ -185,47 +193,62 @@ class TheRobocoldBetaSetup:
 	def temperature(self):
 		"""Returns a reading of the temperature as a float number in Celsius."""
 		with self._sensirion_Lock:
-			return self.sensirion.temperature
+			return self._sensirion.temperature
 	
 	@property
 	def humidity(self):
 		"""Returns a reading of the humidity as a float number in %RH."""
 		with self._sensirion_Lock:
-			return self.sensirion.humidity
+			return self._sensirion.humidity
 	
 	# Robocold ---------------------------------------------------------
 	
 	def reset_robocold(self):
 		"""Reset the position of both stages."""
-		with self._robocold_Lock:
-			self.robocold.reset()
+		with self.lock_robocold:
+			self._robocold.reset()
 	
 	def move_to_slot(self, slot_number:int):
 		"""Move stages in order to align the beta source and reference
 		detector trigger to the given slot."""
 		slot_position = [int(self.configuration_df.loc[slot_number,p]) for p in ['position_long_stage','position_short_stage']]
-		with self._robocold_Lock:
-			self.robocold.move_to(tuple(slot_position))
+		with self.lock_robocold:
+			self._robocold.move_to(tuple(slot_position))
 	
 	def place_source_such_that_it_does_not_irradiate_any_DUT(self):
 		"""Moves the stages such that not any DUT is irradiated by the 
 		source."""
-		self.reset_robocold() # Not the best implementation, but should work for the time being.
+		with self.lock_robocold:
+			self.reset_robocold() # Not the best implementation, but should work for the time being.
 	
 	# Others -----------------------------------------------------------
 	
-	def get_device_name_in_slot(self, slot_number:int)->str:
+	def get_name_of_device_in_slot_number(self, slot_number:int)->str:
 		"""Get the name of the device in the given slot."""
 		return self.configuration_df.loc[slot_number,'device_name']
 	
 	def _caen_channel_given_slot_number(self, slot_number:int):
 		caen_serial_number = self.configuration_df.loc[slot_number,'caen_serial_number']
 		caen_channel_number = int(self.configuration_df.loc[slot_number,'caen_channel_number'])
-		return OneCAENChannel(self.caens[caen_serial_number], caen_channel_number)
+		return OneCAENChannel(self._caens[caen_serial_number], caen_channel_number)
 	
 if __name__ == '__main__':
 	import time
-	from random import shuffle
+	import threading
+	
+	exit_flag = False
+	
+	class IVRealTimeMeasure(threading.Thread):
+		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup):
+			threading.Thread.__init__(self)
+			self.name = name
+			self.slot_number = slot_number
+			self.the_setup = the_setup
+		def run(self):
+			with self.the_setup.lock_bias_for_slot[self.slot_number]:
+				while not exit_flag:
+					print(f'{self.name}: {self.the_setup.measure_bias_voltage(slot_number)} V, {self.the_setup.measure_bias_current(slot_number)} A')
+					time.sleep(1)
 	
 	the_setup = TheRobocoldBetaSetup(
 		path_to_configuration_file = Path('configuration.csv')
@@ -234,16 +257,21 @@ if __name__ == '__main__':
 	print(the_setup.description)
 	print(the_setup.configuration_df)
 	
-	SLOTS_TO_MEASURE = [1,2,3,4]
+	SLOTS_TO_MEASURE = [2]
+	VOLTAGES = {
+		1: 333,
+		2: 500,
+	}
 	
-	while True:
-		shuffle(SLOTS_TO_MEASURE)
-		for slot_number in SLOTS_TO_MEASURE:
-			print(f'Moving to slot {slot_number}...')
-			the_setup.move_to_slot(slot_number)
-			print('Connecting the slot to the oscilloscope...')
-			the_setup.connect_slot_to_oscilloscope(slot_number)
-			print(f'In this slot we find device {the_setup.get_device_name_in_slot(slot_number)}')
-			print(f'\tMeasured bias voltage = {the_setup.measure_bias_voltage(slot_number)} V')
-			print(f'\tMeasured bias current = {the_setup.measure_bias_current(slot_number)} A')
-			time.sleep(10)
+	for slot_number in SLOTS_TO_MEASURE:
+		print(f'Slot {slot_number}...')
+		print(f'\tMoving...')
+		the_setup.move_to_slot(slot_number)
+		print('\tConnecting the slot to the oscilloscope...')
+		the_setup.connect_slot_to_oscilloscope(slot_number)
+		print(f'\tIn this slot we find device {the_setup.get_name_of_device_in_slot_number(slot_number)}')
+		print(f'\tSetting the bias voltage for this slot...')
+		the_setup.set_bias_voltage(slot_number, VOLTAGES[slot_number])
+		print(f'\tMeasured bias voltage = {the_setup.measure_bias_voltage(slot_number)} V')
+		print(f'\tMeasured bias current = {the_setup.measure_bias_current(slot_number)} A')
+		print(f'\tT = {the_setup.temperature:.2f} °C, H = {the_setup.humidity:.2f} %RH')
