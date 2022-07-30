@@ -33,12 +33,9 @@ class TheRobocoldBetaSetup:
 		self._sensirion_Lock = threading.RLock()
 		self._caen_Lock = threading.RLock()
 		self._rf_multiplexer_Lock = threading.RLock()
-		
-		# Threading locks public ---
-		self.lock_oscilloscope = threading.RLock()
-		self.lock_robocold = threading.RLock()
-		self.lock_bias_for_slot = {slot_number: threading.RLock() for slot_number in self.configuration_df.index}
-		self.lock_signal_acquisition = threading.RLock() # Locks the oscilloscope and The Castle
+		self._robocold_lock = threading.RLock()
+		self._bias_for_slot_Lock = {slot_number: threading.RLock() for slot_number in self.configuration_df.index}
+		self._signal_acquisition_Lock = threading.RLock() # Locks the oscilloscope and The Castle
 	
 	@property
 	def description(self) -> str:
@@ -74,6 +71,21 @@ class TheRobocoldBetaSetup:
 	
 	# Bias voltage power supply ----------------------------------------
 	
+	def hold_control_of_bias_for_slot_number(self, slot_number:int):
+		"""When this is called in a `with` statement, it will guarantee
+		the exclusive control of the bias conditions for the slot. Note 
+		that others will be able to measure, but not change the voltage/current.
+		
+		Example
+		-------
+		```
+		with the_setup.hold_control_of_bias_for_slot_number(slot_number):
+			# Nobody else from other thread can change the bias conditions for this slot.
+			the_setup.set_bias_voltage(slot_number, volts) # This will not change unless you change it here.
+		```
+		"""
+		return self._bias_for_slot_Lock[slot_number]
+	
 	def measure_bias_voltage(self, slot_number:int)->float:
 		"""Returns the measured bias voltage in the given slot."""
 		caen_channel = self._caen_channel_given_slot_number(slot_number)
@@ -98,7 +110,7 @@ class TheRobocoldBetaSetup:
 			raise TypeError(f'`volts` must be a float number, received object of type {type(volts)}.')
 		if not isinstance(freeze_until_not_ramping_anymore, bool):
 			raise TypeError(f'`freeze_until_not_ramping_anymore` must be boolean.')
-		with self.lock_bias_for_slot[slot_number]: # Act only if the slot is free.
+		with self._bias_for_slot_Lock[slot_number]: # Act only if the slot is free.
 			caen_channel = self._caen_channel_given_slot_number(slot_number)
 			with self._caen_Lock:
 				if freeze_until_not_ramping_anymore:
@@ -142,33 +154,47 @@ class TheRobocoldBetaSetup:
 		self._check_device_name(device_name)
 		if status not in {'on','off'}:
 			raise ValueError(f'`status` must be either "on" or "off", received {status}.')
-		with self.lock_bias_for_slot[slot_number]: # Act only if the slot is free.
+		with self._bias_for_slot_Lock[slot_number]: # Act only if the slot is free.
 			caen_channel = self._caen_channel_given_slot_number(slot_number)
 			with self._caen_Lock:
 				caen_channel.output = status
 	
 	# Signal acquiring -------------------------------------------------
 	
+	def hold_signal_acquisition(self):
+		"""When this is called in a `with` statement, it will guarantee
+		the exclusive control of the signal acquisition system, i.e. the
+		oscilloscope and the RF multiplexer (The Castle).
+		
+		Example
+		-------
+		```
+		with the_setup.hold_signal_acquisition():
+			# Nobody else from other thread can change anything from the oscilloscope or The Castle.
+		```
+		"""
+		return self._signal_acquisition_Lock
+	
 	def connect_slot_to_oscilloscope(self, slot_number:int):
 		"""Commute the RF multiplexer such that the device in the `slot_number`
 		gets connected to the oscilloscope."""
-		with self.lock_signal_acquisition:
+		with self._signal_acquisition_Lock:
 			self._rf_multiplexer.connect_channel(int(self.configuration_df.loc[slot_number,'The_Castle_channel_number']))
 	
 	def set_oscilloscope_vdiv(self, oscilloscope_channel_number:int, vdiv:float):
 		"""Set the vertical scale of the given channel in the oscilloscope."""
-		with self.lock_signal_acquisition:
+		with self._signal_acquisition_Lock:
 			self._oscilloscope.set_vdiv(channel=channel, vdiv=vdiv)
 			
 	def set_oscilloscope_trigger_threshold(self, level:float):
 		"""Set the threshold level of the trigger."""
-		with self.lock_signal_acquisition:
+		with self._signal_acquisition_Lock:
 			source = self._oscilloscope.get_trig_source()
 			self._oscilloscope.set_trig_level(trig_source=source, level=level)
 	
 	def wait_for_trigger(self):
 		"""Blocks execution until there is a trigger in the oscilloscope."""
-		with self.lock_signal_acquisition:
+		with self._signal_acquisition_Lock:
 			self._oscilloscope.wait_for_single_trigger()
 	
 	def get_waveform(self, oscilloscope_channel_number:int)->dict:
@@ -184,7 +210,7 @@ class TheRobocoldBetaSetup:
 		waveform: dict
 			A dictionary of the form `{'Time (s)': np.array, 'Amplitude (V)': np.array}`.
 		"""
-		with self.lock_signal_acquisition:
+		with self._signal_acquisition_Lock:
 			return self._oscilloscope.get_waveform(channel=self.devices_connections[device_name]['oscilloscope channel']) 
 	
 	# Temperature and humidity sensor ----------------------------------
@@ -203,22 +229,37 @@ class TheRobocoldBetaSetup:
 	
 	# Robocold ---------------------------------------------------------
 	
+	def hold_control_of_robocold(self):
+		"""When this is called in a `with` statement, it will guarantee
+		the exclusive control of Robocold while within the statement.
+		
+		Example
+		-------
+		```
+		with the_setup.hold_control_of_robocold():
+			the_setup.move_to_slot(blah)
+			# Nobody else from other thread can control Robocold now, it
+			will stay in slot `blah` and do whatever you want.
+		```
+		"""
+		return self._robocold_lock
+	
 	def reset_robocold(self):
 		"""Reset the position of both stages."""
-		with self.lock_robocold:
+		with self._robocold_lock:
 			self._robocold.reset()
 	
 	def move_to_slot(self, slot_number:int):
 		"""Move stages in order to align the beta source and reference
 		detector trigger to the given slot."""
 		slot_position = [int(self.configuration_df.loc[slot_number,p]) for p in ['position_long_stage','position_short_stage']]
-		with self.lock_robocold:
+		with self._robocold_lock:
 			self._robocold.move_to(tuple(slot_position))
 	
 	def place_source_such_that_it_does_not_irradiate_any_DUT(self):
 		"""Moves the stages such that not any DUT is irradiated by the 
 		source."""
-		with self.lock_robocold:
+		with self._robocold_lock:
 			self.reset_robocold() # Not the best implementation, but should work for the time being.
 	
 	# Others -----------------------------------------------------------
@@ -240,15 +281,18 @@ if __name__ == '__main__':
 	exit_flag = False
 	
 	class IVRealTimeMeasure(threading.Thread):
-		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup):
+		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup, voltage_to_measure:float):
 			threading.Thread.__init__(self)
 			self.name = name
 			self.slot_number = slot_number
 			self.the_setup = the_setup
+			self.voltage_to_measure = voltage_to_measure
 		def run(self):
-			with self.the_setup.lock_bias_for_slot[self.slot_number]:
+			with self.the_setup.hold_control_of_bias_for_slot_number(self.slot_number):
+				print(f'Setting bias voltage {self.voltage_to_measure} V to slot {self.slot_number}...')
+				self.the_setup.set_bias_voltage(slot_number=self.slot_number, volts=self.voltage_to_measure)
 				while not exit_flag:
-					print(f'{self.name}: {self.the_setup.measure_bias_voltage(slot_number)} V, {self.the_setup.measure_bias_current(slot_number)} A')
+					print(f'{self.name}: {self.the_setup.measure_bias_voltage(self.slot_number)} V, {self.the_setup.measure_bias_current(self.slot_number)} A')
 					time.sleep(numpy.random.random())
 	
 	the_setup = TheRobocoldBetaSetup(
@@ -270,6 +314,7 @@ if __name__ == '__main__':
 			name = f'IV measuring thread for slot {slot_number}',
 			slot_number = slot_number,
 			the_setup = the_setup,
+			voltage_to_measure = VOLTAGES[slot_number],
 		)
 		threads.append(thread)
 	threads.append(
@@ -277,15 +322,18 @@ if __name__ == '__main__':
 			name=f'IV parasitic thread',
 			slot_number = 1,
 			the_setup = the_setup,
+			voltage_to_measure = 444,
 		)
 	)
 	for thread in threads:
 		thread.start()
 	
-	for k in range(10):
-		time.sleep(1)
-	exit_flag = True
-	
-	while any([thread.is_alive() for thread in threads]):
-		print(f'Waiting for threads to finish...')
-		time.sleep(1)
+	try:
+		while True:
+			time.sleep(1)
+	except:
+		exit_flag = True
+	finally:
+		while any([thread.is_alive() for thread in threads]):
+			print(f'Waiting for threads to finish...')
+			time.sleep(1)
