@@ -121,10 +121,15 @@ class TheRobocoldBetaSetup:
 				sleep(1) # It takes a while for the CAEN to realize that it has to change the voltage...
 				while True:
 					with self._caen_Lock:
-						if caen_channel.is_ramping == False:
-							break
+					if self.is_ramping_bias_voltage(slot_number) == False:
+						break
 					sleep(1)
 				sleep(3) # Empirically, after CAEN says it is not ramping anymore, you have to wait 3 seconds to be sure it actually stopped ramping...
+	
+	def is_ramping_bias_voltage(self, slot_number:int)->bool:
+		caen_channel = self._caen_channel_given_slot_number(slot_number)
+		with self._caen_Lock:
+			return caen_channel.is_ramping
 	
 	def measure_bias_current(self, slot_number:int)->float:
 		"""Measures the bias current for the given slot."""
