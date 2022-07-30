@@ -212,7 +212,7 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 				_locals = locals(),
 			)
 			measured_data_list.append(
-				load_whole_dataframe(Felipe.path_to_output_directory_of_script_named('measure_iv_curve.py')/Path('measured_data.sqlite')).reset_index(),
+				load_whole_dataframe(Felipe.path_to_output_directory_of_script_named('iv_curve.py')/Path('measured_data.sqlite')).reset_index(),
 			)
 		measured_data_df = pandas.concat(measured_data_list, ignore_index=True)
 		measured_data_df['Bias voltage (V)'] *= -1
