@@ -9,13 +9,16 @@ from plotly.subplots import make_subplots
 from TheSetup import TheRobocoldBetaSetup
 import datetime
 from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dataframe # https://github.com/SengerM/huge_dataframe
+import threading
 
-def script_core(directory, the_setup:TheRobocoldBetaSetup, voltages:list, slot_number:int, n_measurements_per_voltage:int, silent=False):
+def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, voltages:list, slot_number:int, n_measurements_per_voltage:int, silent=False):
 	"""Measure an IV curve.
 	Parameters
 	----------
-	directory: Path
+	path_to_directory_in_which_to_store_data: Path
 		Path to the directory where to store the data.
+	measurement_name: str
+		A name for the measurement.
 	n_measurements_per_voltage: int
 		Number of measurements to perform at each voltage.
 	the_setup: TheRobocoldBetaSetup
@@ -29,7 +32,7 @@ def script_core(directory, the_setup:TheRobocoldBetaSetup, voltages:list, slot_n
 	"""
 	
 	John = SmarterBureaucrat(
-		directory,
+		path_to_directory_in_which_to_store_data/Path(measurement_name),
 		new_measurement = True,
 		_locals = locals(),
 	)
@@ -112,15 +115,31 @@ def script_core(directory, the_setup:TheRobocoldBetaSetup, voltages:list, slot_n
 
 	return John.path_to_measurement_base_directory
 
-if __name__ == '__main__':
-	import time
-	import threading
-	import numpy
+def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, voltages:dict, current_compliances:dict, n_measurements_per_voltage:int, silent:bool=False):
+	"""Measure the IV curve of multiple slots.
 	
-	measure_iv_curve = script_core
+	Parameters
+	----------
+	path_to_directory_in_which_to_store_data: Path
+		Path to the directory where to store the data.
+	measurement_name: str
+		A name for the measurement.
+	the_setup: TheRobocoldBetaSetup
+		An instance of `TheRobocoldBetaSetup` to control the hardware.
+	n_measurements_per_voltage: int
+		Number of measurements to perform at each voltage.
+	voltages: dict of lists of floats
+		A dictionary of the form `{int: list of float, int: list of float, ...}`
+		specifying for each slot a list of voltages.
+	current_compliances: dict of floats
+		A dictionary of the form `{int: float, int: float, ...}`
+		specifying the current compliance for each slot.
+	silent: bool, default False
+		If `True`, no progress messages are printed.
+	"""
 	
-	class MeasureIVCurve(threading.Thread):
-		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup, voltages_to_measure:list, n_measurements_per_voltage:int, directory_to_store_data:Path):
+	class MeasureIVCurveThread(threading.Thread):
+		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup, voltages_to_measure:list, n_measurements_per_voltage:int, directory_to_store_data:Path, silent:bool):
 			threading.Thread.__init__(self)
 			self.name = name
 			self.slot_number = slot_number
@@ -128,68 +147,72 @@ if __name__ == '__main__':
 			self.voltages_to_measure = voltages_to_measure
 			self.n_measurements_per_voltage = n_measurements_per_voltage
 			self.directory_to_store_data = directory_to_store_data
+			self.silent = silent
 		def run(self):
-			print(f'Starting thread {self.name} to measure device {the_setup.get_name_of_device_in_slot_number(self.slot_number)}...')
 			measure_iv_curve(
-				directory = self.directory_to_store_data/Path(f'IV_curve_{the_setup.get_name_of_device_in_slot_number(self.slot_number)}'),
+				path_to_directory_in_which_to_store_data = self.directory_to_store_data,
+				measurement_name = f'IV_curve_{the_setup.get_name_of_device_in_slot_number(self.slot_number)}',
 				the_setup = self.the_setup, 
 				voltages = self.voltages_to_measure, 
 				slot_number = self.slot_number, 
 				n_measurements_per_voltage = self.n_measurements_per_voltage, 
-				silent = True,
+				silent = self.silent,
 			)
 	
-	VOLTAGES = {
-		1: 500,
-		2: 500,
-		3: 500,
-		4: 500,
-		5: 500,
-		6: 500,
-	}
-	
 	Richard = SmarterBureaucrat(
-		Path.home()/Path('measurements_data')/Path('IV_curves'),
+		path_to_directory_in_which_to_store_data/Path(measurement_name),
 		new_measurement = True,
 		_locals = locals(),
 	)
 	
-	the_setup = TheRobocoldBetaSetup(path_to_configuration_file = Path('configuration.csv'))
+	if any([not isinstance(_, dict) for _ in [voltages, current_compliances]]):
+		raise TypeError(f'`voltages` and `current_compliances` must be dictionaries, but at least one of them is not...')
+	if set(voltages) != set(current_compliances):
+		raise ValueError(f'The keys of `voltages` and `current_compliances` do not coincide. They should specify the same slot numbers to measure.')
 	
-	print(the_setup.description)
-	print(the_setup.configuration_df)
+	threads = []
+	for slot_number in set(voltages):
+		the_setup.set_current_compliance(slot_number=slot_number, amperes=current_compliances[slot_number])
+		thread = MeasureIVCurveThread(
+			name = f'IV measuring thread for slot {slot_number}',
+			slot_number = slot_number,
+			the_setup = the_setup,
+			voltages_to_measure = voltages[slot_number],
+			n_measurements_per_voltage = n_measurements_per_voltage,
+			directory_to_store_data = Richard.path_to_submeasurements_directory,
+			silent = silent,
+		)
+		threads.append(thread)
 	
 	with Richard.do_your_magic():
 		the_setup.configuration_df.to_csv(Richard.path_to_default_output_directory/Path('setup_configuration.csv'))
 		with open(Richard.path_to_default_output_directory/Path('setup_description.txt'), 'w') as ofile:
 			print(the_setup.description, file=ofile)
 		
-		threads = []
-		for slot_number in VOLTAGES.keys():
-			the_setup.set_current_compliance(slot_number=slot_number, amperes=10e-6)
-			thread = MeasureIVCurve(
-				name = f'IV measuring thread for slot {slot_number}',
-				slot_number = slot_number,
-				the_setup = the_setup,
-				voltages_to_measure = numpy.linspace(0,VOLTAGES[slot_number],111),
-				n_measurements_per_voltage = 11,
-				directory_to_store_data = Richard.path_to_submeasurements_directory,
-			)
-			threads.append(thread)
-		
-		print(f'Moving the beta source outside all detectors...')
+		if not silent:
+			print(f'Moving the beta source outside all detectors...')
 		the_setup.place_source_such_that_it_does_not_irradiate_any_DUT()
 		
 		for thread in threads:
+			if not silent:
+				print(f'Starting measurement for slot_number = {thread.slot_number}')
 			thread.start()
 		
 		while any([thread.is_alive() for thread in threads]):
 			time.sleep(1)
 		
+		if not silent:
+			print(f'Finished measuring all.')
+		
+		# Do a plot...
 		measured_data_list = []
 		for path_to_submeasurement in Richard.path_to_submeasurements_directory.iterdir():
+			Felipe = SmarterBureaucrat(
+				path_to_submeasurement,
+				_locals = locals(),
+			)
 			measured_data_list.append(
-				load_whole_dataframe(path_to_submeasurement/Path('measure_iv_curve/measured_data.sqlite')).reset_index(),
+				load_whole_dataframe(Felipe.path_to_output_directory_of_script_named('measure_iv_curve.py')/Path('measured_data.sqlite')).reset_index(),
 			)
 		measured_data_df = pandas.concat(measured_data_list, ignore_index=True)
 		measured_data_df['Bias voltage (V)'] *= -1
@@ -200,7 +223,7 @@ if __name__ == '__main__':
 			averaged_data_df[f'{col} error'] = standard_deviation_data_df[col]
 		averaged_data_df.reset_index(inplace=True)
 		fig = px.line(
-			averaged_data_df.sort_values('n_voltage'),
+			averaged_data_df.sort_values(['device_name','n_voltage']).reset_index(),
 			x = 'Bias voltage (V)',
 			y = 'Bias current (A)',
 			error_y = 'Bias current (A) error',
@@ -213,3 +236,21 @@ if __name__ == '__main__':
 			str(Richard.path_to_default_output_directory/Path('iv_curves_measured.html')),
 			include_plotlyjs = 'cdn',
 		)
+	return Richard.path_to_measurement_base_directory
+
+if __name__=='__main__':
+	import numpy
+	
+	SLOTS = [1,2,3,4,5,6]
+	VOLTAGES = {slot: numpy.linspace(0,500,5) for slot in SLOTS}
+	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}
+	
+	measure_iv_curve_multiple_slots(
+		path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'),
+		measurement_name = input('Measurement name? '),
+		the_setup = TheRobocoldBetaSetup(Path('configuration.csv')), 
+		voltages = VOLTAGES,
+		current_compliances = CURRENT_COMPLIANCES,
+		n_measurements_per_voltage = 11,
+		silent = False,
+	)
