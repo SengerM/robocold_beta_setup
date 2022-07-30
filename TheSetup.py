@@ -116,11 +116,16 @@ class TheRobocoldBetaSetup:
 		with self._bias_for_slot_Lock[slot_number]: # Act only if the slot is free.
 			caen_channel = self._caen_channel_given_slot_number(slot_number)
 			with self._caen_Lock:
-				caen_channel.V_set = volts
+				try:
+					caen_channel.V_set = volts
+				except Exception as e:
+					if str(e) == 'Error trying to set the parameter VSET. The response from the instrument is: "#BD:00,VAL:ERR"': # This probably means that we were requested to apply a voltage higher than that the source can handle.
+						raise ValueError(f'Cannot apply this voltage due to hardware limitations.')
+					else:
+						raise e
 			if block_until_not_ramping_anymore:
 				sleep(1) # It takes a while for the CAEN to realize that it has to change the voltage...
 				while True:
-					with self._caen_Lock:
 					if self.is_ramping_bias_voltage(slot_number) == False:
 						break
 					sleep(1)
