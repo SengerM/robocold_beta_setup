@@ -118,7 +118,7 @@ class TheRobocoldBetaSetup:
 			with self._caen_Lock:
 				caen_channel.V_set = volts
 			if block_until_not_ramping_anymore:
-				time.sleep(1) # It takes a while for the CAEN to realize that it has to change the voltage...
+				sleep(1) # It takes a while for the CAEN to realize that it has to change the voltage...
 				while True:
 					with self._caen_Lock:
 						if caen_channel.is_ramping == False:
@@ -280,58 +280,4 @@ class TheRobocoldBetaSetup:
 		caen_serial_number = self.configuration_df.loc[slot_number,'caen_serial_number']
 		caen_channel_number = int(self.configuration_df.loc[slot_number,'caen_channel_number'])
 		return OneCAENChannel(self._caens[caen_serial_number], caen_channel_number)
-	
-if __name__ == '__main__':
-	import time
-	import threading
-	import numpy
-	from measure_iv_curve import script_core as measure_iv_curve
-	
-	exit_flag = False
-	
-	class MeasureIVCurve(threading.Thread):
-		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup, voltages_to_measure:list, n_measurements_per_voltage:int):
-			threading.Thread.__init__(self)
-			self.name = name
-			self.slot_number = slot_number
-			self.the_setup = the_setup
-			self.voltages_to_measure = voltages_to_measure
-			self.n_measurements_per_voltage = n_measurements_per_voltage
-		def run(self):
-			print(f'Starting thread {self.name} to measure device {the_setup.get_name_of_device_in_slot_number(self.slot_number)}...')
-			measure_iv_curve(
-				directory = Path.home()/Path('measurements_data')/Path(f'IV_curve_{the_setup.get_name_of_device_in_slot_number(self.slot_number)}'),
-				the_setup = self.the_setup, 
-				voltages = self.voltages_to_measure, 
-				slot_number = self.slot_number, 
-				n_measurements_per_voltage = self.n_measurements_per_voltage, 
-				silent = False,
-			)
-	
-	the_setup = TheRobocoldBetaSetup(path_to_configuration_file = Path('configuration.csv'))
-	
-	print(the_setup.description)
-	print(the_setup.configuration_df)
-	
-	SLOTS_TO_MEASURE = [1,2]
-	VOLTAGES = {
-		1: 333,
-		2: 500,
-	}
-	
-	threads = []
-	for slot_number in SLOTS_TO_MEASURE:
-		thread = MeasureIVCurve(
-			name = f'IV measuring thread for slot {slot_number}',
-			slot_number = slot_number,
-			the_setup = the_setup,
-			voltages_to_measure = numpy.linspace(0,VOLTAGES[slot_number],5),
-			n_measurements_per_voltage = 11,
-		)
-		threads.append(thread)
-	
-	for thread in threads:
-		thread.start()
-	
-	while any([thread.is_alive() for thread in threads]):
-		time.sleep(1)
+

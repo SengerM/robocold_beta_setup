@@ -112,3 +112,70 @@ def script_core(directory, the_setup:TheRobocoldBetaSetup, voltages:list, slot_n
 	fig.write_html(str(John.path_to_default_output_directory/Path(f'iv_vs_time.html')), include_plotlyjs='cdn')
 
 	return John.path_to_measurement_base_directory
+
+if __name__ == '__main__':
+	import time
+	import threading
+	import numpy
+	
+	measure_iv_curve = script_core
+	
+	class MeasureIVCurve(threading.Thread):
+		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup, voltages_to_measure:list, n_measurements_per_voltage:int, directory_to_store_data:Path):
+			threading.Thread.__init__(self)
+			self.name = name
+			self.slot_number = slot_number
+			self.the_setup = the_setup
+			self.voltages_to_measure = voltages_to_measure
+			self.n_measurements_per_voltage = n_measurements_per_voltage
+			self.directory_to_store_data = directory_to_store_data
+		def run(self):
+			print(f'Starting thread {self.name} to measure device {the_setup.get_name_of_device_in_slot_number(self.slot_number)}...')
+			measure_iv_curve(
+				directory = self.directory_to_store_data/Path(f'IV_curve_{the_setup.get_name_of_device_in_slot_number(self.slot_number)}'),
+				the_setup = self.the_setup, 
+				voltages = self.voltages_to_measure, 
+				slot_number = self.slot_number, 
+				n_measurements_per_voltage = self.n_measurements_per_voltage, 
+				silent = False,
+			)
+	
+	VOLTAGES = {
+		1: 500,
+		2: 500,
+		3: 500,
+		4: 500,
+		5: 500,
+		6: 500,
+	}
+	
+	Richard = SmarterBureaucrat(
+		Path.home()/Path('measurements_data')/Path('IV_curves'),
+		new_measurement = True,
+		_locals = locals(),
+	)
+	
+	the_setup = TheRobocoldBetaSetup(path_to_configuration_file = Path('configuration.csv'))
+	
+	print(the_setup.description)
+	print(the_setup.configuration_df)
+	
+	with Richard.do_your_magic():
+		threads = []
+		for slot_number in VOLTAGES.keys():
+			the_setup.set_current_compliance(slot_number=slot_number, amperes=10e-6)
+			thread = MeasureIVCurve(
+				name = f'IV measuring thread for slot {slot_number}',
+				slot_number = slot_number,
+				the_setup = the_setup,
+				voltages_to_measure = numpy.linspace(0,VOLTAGES[slot_number],5),
+				n_measurements_per_voltage = 11,
+				directory_to_store_data = Richard.path_to_submeasurements_directory,
+			)
+			threads.append(thread)
+		
+		for thread in threads:
+			thread.start()
+		
+		while any([thread.is_alive() for thread in threads]):
+			time.sleep(1)
