@@ -65,7 +65,10 @@ def script_core(directory: Path):
 				include_plotlyjs = 'cdn',
 			)
 			
-			columns_for_scatter_matrix_plot = set(df.columns) - {'n_trigger','signal_name'}
+			columns_for_scatter_matrix_plot = set(df.columns) 
+			columns_for_scatter_matrix_plot -= {'n_trigger','signal_name'} 
+			columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
+			columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
 			fig = px.scatter_matrix(
 				df,
 				dimensions = sorted(columns_for_scatter_matrix_plot),
