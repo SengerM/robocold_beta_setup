@@ -11,7 +11,7 @@ from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dat
 import threading
 import warnings
 
-def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, voltages:list, slot_number:int, n_measurements_per_voltage:int, silent=False):
+def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, voltages:list, slot_number:int, n_measurements_per_voltage:int, silent=False)->Path:
 	"""Measure an IV curve.
 	Parameters
 	----------
@@ -29,6 +29,11 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 		The number of slot in which to measure the IV curve.
 	silent: bool, default False
 		If `True`, no progress messages are printed.
+	
+	Returns
+	-------
+	path_to_measurement_base_directory: Path
+		A path to the directory where the measurement's data was stored.
 	"""
 	
 	John = SmarterBureaucrat(
@@ -120,7 +125,7 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 
 	return John.path_to_measurement_base_directory
 
-def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, voltages:dict, current_compliances:dict, n_measurements_per_voltage:int, silent:bool=False):
+def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, voltages:dict, current_compliances:dict, n_measurements_per_voltage:int, silent:bool=False)->Path:
 	"""Measure the IV curve of multiple slots.
 	
 	Parameters
@@ -141,6 +146,11 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 		specifying the current compliance for each slot.
 	silent: bool, default False
 		If `True`, no progress messages are printed.
+	
+	Returns
+	-------
+	path_to_measurement_base_directory: Path
+		A path to the directory where the measurement's data was stored.
 	"""
 	
 	class MeasureIVCurveThread(threading.Thread):
