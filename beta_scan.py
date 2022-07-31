@@ -13,12 +13,8 @@ import warnings
 from signals.PeakSignal import PeakSignal, draw_in_plotly
 from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
 
-def parse_waveform(data_from_oscilloscope:dict):
-	signal = PeakSignal(
-		time = data_from_oscilloscope['Time (s)'],
-		samples = data_from_oscilloscope['Amplitude (V)'],
-	)
-	parsed_data = {
+def parse_waveform(signal:PeakSignal):
+	return {
 		'Amplitude (V)': signal.amplitude,
 		'Noise (V)': signal.noise,
 		'Rise time (s)': signal.rise_time,
@@ -26,7 +22,6 @@ def parse_waveform(data_from_oscilloscope:dict):
 		'Time over noise (s)': signal.time_over_noise,
 		'Peak start time (s)': signal.peak_start_time,
 	}
-	return parsed_data, signal
 
 def trigger_and_measure_dut_stuff(the_setup:TheRobocoldBetaSetup, slot_number:int):
 	elapsed_seconds = 9999
@@ -43,7 +38,7 @@ def trigger_and_measure_dut_stuff(the_setup:TheRobocoldBetaSetup, slot_number:in
 		elapsed_seconds = trigger_time - time.time()
 	return measured_stuff
 
-def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, slot_number:int, n_triggers:int, bias_voltage:float, silent=False, telegram_progress_reporter:TelegramReporter=None)->Path:
+def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False, telegram_progress_reporter:TelegramReporter=None)->Path:
 	"""Perform a beta scan.
 	
 	Parameters
@@ -58,6 +53,18 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 		An instance of `TheRobocoldBetaSetup` to control the hardware.
 	slot_number: int
 		The number of slot in which to measure the IV curve.
+	software_trigger: callable, optional
+		A callable that receives a dictionary of waveforms of type `PeakSignal`
+		and returns `True` or `False`, that will be called for each trigger.
+		If `software_trigger(waveforms_dict)` returns `True`, the trigger
+		will be considered as nice, otherwise it will be discarded and a
+		new trigger will be taken. Example:
+		```
+		def software_trigger(signals_dict):
+			DUT_signal = signals_dict['DUT']
+			PMT_signal = signals_dict['reference_trigger']
+			return abs(DUT_signal.peak_start_time - PMT_signal.peak_start_time) < 2e-9
+		```
 	bias_voltage: float
 		The value for the voltage.
 	silent: bool, default False
@@ -97,34 +104,50 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 								
 								n_waveform = -1
 								for n_trigger in range(n_triggers):
+									# Acquire ---
 									if not silent:
 										print(f'Acquiring n_trigger={n_trigger}/{n_triggers-1}...')
-									measured_stuff = trigger_and_measure_dut_stuff(the_setup, slot_number) # Hold here until there is a trigger.
 									
-									measured_stuff['When'] = datetime.datetime.now()
-									measured_stuff['n_trigger'] = n_trigger
-									measured_stuff_df = pandas.DataFrame(measured_stuff, index=[0]).set_index(['n_trigger'])
-									measured_stuff_dumper.append(measured_stuff_df)
-									
-									for signal_name in the_setup.oscilloscope_configuration_df.index:
-										waveform_data = the_setup.get_waveform(oscilloscope_channel_number = the_setup.oscilloscope_configuration_df.loc[signal_name,'n_channel'])
+									do_they_like_this_trigger = False
+									while do_they_like_this_trigger == False:
+										this_trigger_measured_stuff = trigger_and_measure_dut_stuff(the_setup, slot_number) # Hold here until there is a trigger.
 										
+										this_trigger_measured_stuff['When'] = datetime.datetime.now()
+										this_trigger_measured_stuff['n_trigger'] = n_trigger
+										this_trigger_measured_stuff_df = pandas.DataFrame(this_trigger_measured_stuff, index=[0]).set_index(['n_trigger'])
+										
+										this_trigger_waveforms_dict = {}
+										for signal_name in the_setup.oscilloscope_configuration_df.index:
+											waveform_data = the_setup.get_waveform(oscilloscope_channel_number = the_setup.oscilloscope_configuration_df.loc[signal_name,'n_channel'])
+											this_trigger_waveforms_dict[signal_name] = PeakSignal(
+												time = waveform_data['Time (s)'],
+												samples = waveform_data['Amplitude (V)']
+											)
+										
+										if software_trigger is None:
+											do_they_like_this_trigger = True
+										else:
+											do_they_like_this_trigger = software_trigger(this_trigger_waveforms_dict)
+									
+									# Parse and save data ---
+									measured_stuff_dumper.append(this_trigger_measured_stuff_df)
+									for signal_name in the_setup.oscilloscope_configuration_df.index:
 										n_waveform += 1
 										
-										waveform_df = pandas.DataFrame(waveform_data)
+										waveform_df = pandas.DataFrame({'Time (s)': this_trigger_waveforms_dict[signal_name].time, 'Amplitude (V)': this_trigger_waveforms_dict[signal_name].samples})
 										waveform_df['n_waveform'] = n_waveform
 										waveform_df.set_index('n_waveform', inplace=True)
 										waveforms_dumper.append(waveform_df)
 										
-										parsed_from_waveforms, peak_signal = parse_waveform(waveform_data)
-										parsed_from_waveforms['n_trigger'] = n_trigger
-										parsed_from_waveforms['signal_name'] = signal_name
-										parsed_from_waveforms['n_waveform'] = n_waveform
-										parsed_from_waveforms_df = pandas.DataFrame(
-											parsed_from_waveforms,
+										parsed_from_waveform = parse_waveform(this_trigger_waveforms_dict[signal_name])
+										parsed_from_waveform['n_trigger'] = n_trigger
+										parsed_from_waveform['signal_name'] = signal_name
+										parsed_from_waveform['n_waveform'] = n_waveform
+										parsed_from_waveform_df = pandas.DataFrame(
+											parsed_from_waveform,
 											index = [0],
 										).set_index(['n_trigger','signal_name'])
-										parsed_from_waveforms_dumper.append(parsed_from_waveforms_df)
+										parsed_from_waveforms_dumper.append(parsed_from_waveform_df)
 									
 									if telegram_progress_reporter is not None:
 										telegram_progress_reporter.update(1) 
@@ -137,7 +160,7 @@ if __name__=='__main__':
 	import my_telegram_bots
 	from plot_everything_from_beta_scan import script_core as plot_everything_from_beta_scan
 	
-	N_TRIGGERS = 1111
+	N_TRIGGERS = 111
 	MEASUREMENT_NAME = input('Measurement name? ').replace(' ','_')
 	
 	the_setup = TheRobocoldBetaSetup(
@@ -150,6 +173,11 @@ if __name__=='__main__':
 		telegram_chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
 	)
 	
+	def software_trigger(signals_dict):
+		DUT_signal = signals_dict['DUT']
+		PMT_signal = signals_dict['reference_trigger']
+		return 1e-9 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 5e-9
+	
 	with reporter.report_for_loop(N_TRIGGERS, MEASUREMENT_NAME) as reporter:
 		p = script_core(
 			path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'), 
@@ -160,5 +188,6 @@ if __name__=='__main__':
 			bias_voltage = 500,
 			silent = False, 
 			telegram_progress_reporter = reporter,
+			software_trigger = software_trigger,
 		)
 		plot_everything_from_beta_scan(p)
