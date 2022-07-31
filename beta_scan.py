@@ -135,6 +135,7 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 if __name__=='__main__':
 	import numpy
 	import my_telegram_bots
+	from plot_everything_from_beta_scan import script_core as plot_everything_from_beta_scan
 	
 	N_TRIGGERS = 1111
 	MEASUREMENT_NAME = input('Measurement name? ').replace(' ','_')
@@ -150,13 +151,14 @@ if __name__=='__main__':
 	)
 	
 	with reporter.report_for_loop(N_TRIGGERS, MEASUREMENT_NAME) as reporter:
-		script_core(
+		p = script_core(
 			path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'), 
 			measurement_name = MEASUREMENT_NAME, 
 			the_setup = the_setup, 
-			slot_number = 1, 
+			slot_number = 2, 
 			n_triggers = N_TRIGGERS, 
 			bias_voltage = 500,
 			silent = False, 
 			telegram_progress_reporter = reporter,
 		)
+		plot_everything_from_beta_scan(p)
