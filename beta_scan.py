@@ -10,18 +10,38 @@ from TheSetup import TheRobocoldBetaSetup
 from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import threading
 import warnings
-from signals.PeakSignal import PeakSignal, draw_in_plotly
+from signals.PeakSignal import PeakSignal, draw_in_plotly # https://github.com/SengerM/signals
 from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
+import numpy
 
 def parse_waveform(signal:PeakSignal):
-	return {
+	parsed = {
 		'Amplitude (V)': signal.amplitude,
 		'Noise (V)': signal.noise,
 		'Rise time (s)': signal.rise_time,
 		'Collected charge (V s)': signal.peak_integral,
 		'Time over noise (s)': signal.time_over_noise,
 		'Peak start time (s)': signal.peak_start_time,
+		'Whole signal integral (V s)': signal.integral_from_baseline,
 	}
+	try:
+		SNR = signal.amplitude/signal.noise
+	except Exception:
+		SNR = float('NaN')
+	parsed['SNR'] = SNR
+	for threshold_percentage in [10,20,30,40,50,60,70,80,90]:
+		try:
+			time_over_threshold = signal.find_time_over_threshold(threshold_percentage)
+		except Exception:
+			time_over_threshold = float('NaN')
+		parsed[f'Time over {threshold_percentage}% (s)'] = time_over_threshold
+	for pp in [10,20,30,40,50,60,70,80,90]:
+		try:
+			time_at_this_pp = float(signal.find_time_at_rising_edge(pp))
+		except Exception:
+			time_at_this_pp = float('NaN')
+		parsed[f't_{pp} (s)'] = time_at_this_pp
+	return parsed
 
 def trigger_and_measure_dut_stuff(the_setup:TheRobocoldBetaSetup, slot_number:int):
 	elapsed_seconds = 9999
@@ -37,6 +57,46 @@ def trigger_and_measure_dut_stuff(the_setup:TheRobocoldBetaSetup, slot_number:in
 		}
 		elapsed_seconds = trigger_time - time.time()
 	return measured_stuff
+
+def plot_waveform(signal):
+	fig = draw_in_plotly(signal)
+	fig.update_layout(
+		xaxis_title = "Time (s)",
+		yaxis_title = "Amplitude (V)",
+	)
+	MARKERS = { # https://plotly.com/python/marker-style/#custom-marker-symbols
+		10: 'circle',
+		20: 'square',
+		30: 'diamond',
+		40: 'cross',
+		50: 'x',
+		60: 'star',
+		70: 'hexagram',
+		80: 'star-triangle-up',
+		90: 'star-triangle-down',
+	}
+	for pp in [10,20,30,40,50,60,70,80,90]:
+		try:
+			fig.add_trace(
+				go.Scatter(
+					x = [signal.find_time_at_rising_edge(pp)],
+					y = [signal(signal.find_time_at_rising_edge(pp))],
+					mode = 'markers',
+					name = f'Time at {pp} %',
+					marker=dict(
+						color = 'rgba(0,0,0,.5)',
+						size = 11,
+						symbol = MARKERS[pp]+'-open-dot',
+						line = dict(
+							color = 'rgba(0,0,0,.5)',
+							width = 2,
+						)
+					),
+				)
+			)
+		except Exception as e:
+			pass
+	return fig
 
 def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False, telegram_progress_reporter:TelegramReporter=None)->Path:
 	"""Perform a beta scan.
@@ -152,11 +212,24 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 									if telegram_progress_reporter is not None:
 										telegram_progress_reporter.update(1) 
 									
+									# Plot some of the signals ---
+									if numpy.random.rand()<20/n_triggers:
+										for signal_name in the_setup.oscilloscope_configuration_df.index:
+											fig = plot_waveform(this_trigger_waveforms_dict[signal_name])
+											fig.update_layout(
+												title = f'n_trigger {n_trigger}, signal_name {signal_name}<br><sup>Measurement: {measurement_name}</sup>',
+											)
+											path_to_save_plots = John.path_to_default_output_directory/Path('plots of some of the signals')
+											path_to_save_plots.mkdir(exist_ok=True)
+											fig.write_html(
+												str(path_to_save_plots/Path(f'n_trigger {n_trigger} signal_name {signal_name}.html')),
+												include_plotlyjs = 'cdn',
+											)
+									
 	return John.path_to_measurement_base_directory
 
 
 if __name__=='__main__':
-	import numpy
 	import my_telegram_bots
 	from plot_everything_from_beta_scan import script_core as plot_everything_from_beta_scan
 	
@@ -176,7 +249,7 @@ if __name__=='__main__':
 	def software_trigger(signals_dict):
 		DUT_signal = signals_dict['DUT']
 		PMT_signal = signals_dict['reference_trigger']
-		return 1e-9 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 5e-9
+		return 0 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 7e-9
 	
 	with reporter.report_for_loop(N_TRIGGERS, MEASUREMENT_NAME) as reporter:
 		p = script_core(
@@ -185,7 +258,7 @@ if __name__=='__main__':
 			the_setup = the_setup, 
 			slot_number = 2, 
 			n_triggers = N_TRIGGERS, 
-			bias_voltage = 500,
+			bias_voltage = 550,
 			silent = False, 
 			telegram_progress_reporter = reporter,
 			software_trigger = software_trigger,
