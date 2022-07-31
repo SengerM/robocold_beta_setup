@@ -43,7 +43,7 @@ def trigger_and_measure_dut_stuff(the_setup:TheRobocoldBetaSetup, slot_number:in
 		elapsed_seconds = trigger_time - time.time()
 	return measured_stuff
 
-def beta_scan(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, slot_number:int, n_triggers:int, bias_voltage:float, silent=False, telegram_progress_reporter:TelegramReporter=None)->Path:
+def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, slot_number:int, n_triggers:int, bias_voltage:float, silent=False, telegram_progress_reporter:TelegramReporter=None)->Path:
 	"""Perform a beta scan.
 	
 	Parameters
@@ -150,7 +150,7 @@ if __name__=='__main__':
 	)
 	
 	with reporter.report_for_loop(N_TRIGGERS, MEASUREMENT_NAME) as reporter:
-		beta_scan(
+		script_core(
 			path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'), 
 			measurement_name = MEASUREMENT_NAME, 
 			the_setup = the_setup, 
