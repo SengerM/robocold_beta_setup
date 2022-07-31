@@ -233,8 +233,14 @@ if __name__=='__main__':
 	import my_telegram_bots
 	from plot_everything_from_beta_scan import script_core as plot_everything_from_beta_scan
 	
-	N_TRIGGERS = 111
+	N_TRIGGERS = 1111
 	MEASUREMENT_NAME = input('Measurement name? ').replace(' ','_')
+	def SOFTWARE_TRIGGER(signals_dict):
+		DUT_signal = signals_dict['DUT']
+		PMT_signal = signals_dict['reference_trigger']
+		return 0 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 7e-9
+	
+	# ------------------------------------------------------------------
 	
 	the_setup = TheRobocoldBetaSetup(
 		path_to_slots_configuration_file = Path('slots_configuration.csv'),
@@ -246,11 +252,6 @@ if __name__=='__main__':
 		telegram_chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
 	)
 	
-	def software_trigger(signals_dict):
-		DUT_signal = signals_dict['DUT']
-		PMT_signal = signals_dict['reference_trigger']
-		return 0 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 7e-9
-	
 	with reporter.report_for_loop(N_TRIGGERS, MEASUREMENT_NAME) as reporter:
 		p = script_core(
 			path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'), 
@@ -261,6 +262,6 @@ if __name__=='__main__':
 			bias_voltage = 550,
 			silent = False, 
 			telegram_progress_reporter = reporter,
-			software_trigger = software_trigger,
+			software_trigger = SOFTWARE_TRIGGER,
 		)
 		plot_everything_from_beta_scan(p)
