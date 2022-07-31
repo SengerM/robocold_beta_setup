@@ -280,6 +280,22 @@ class TheRobocoldBetaSetup:
 		with self._robocold_lock:
 			self.reset_robocold() # Not the best implementation, but should work for the time being.
 	
+	@property
+	def robocold_position(self):
+		"""Return the position of Robocold as a tuple of two int."""
+		with self._robocold_lock:
+			return self._robocold.position
+	
+	@robocold_position.setter
+	def robocold_position(self, position:tuple):
+		"""Set the position to Robocold. The execution of the program is
+		halted until Robocold stops moving."""
+		if not isinstance(position, tuple) or len(position)!=2 or any([not isinstance(p, int) for p in position]):
+			raise TypeError('`position` must be a `tuple` with two `int`.')
+		
+		with self._robocold_lock:
+			self._robocold.move_to(position)
+	
 	# Others -----------------------------------------------------------
 	
 	def get_name_of_device_in_slot_number(self, slot_number:int)->str:
