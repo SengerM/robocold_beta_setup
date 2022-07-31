@@ -12,12 +12,12 @@ class TheRobocoldBetaSetup:
 	"""This class wraps all the hardware so if there are changes it is 
 	easy to adapt. It should be thread safe.
 	"""
-	def __init__(self, path_to_slots_configuration_file:Path):
-		"""
-		"""
-		if not isinstance(path_to_slots_configuration_file, Path):
-			raise TypeError(f'`path_to_slots_configuration_file` must be of type {type(Path())}, received object of type {type(path_to_slots_configuration_file)}.')
+	def __init__(self, path_to_slots_configuration_file:Path, path_to_oscilloscope_configuration_file:Path):
+		for name in {'path_to_oscilloscope_configuration_file','path_to_slots_configuration_file'}:
+			if not isinstance(locals()[name], Path):
+				raise TypeError(f'`{name}` must be of type {type(Path())}, received object of type {type(locals()[name])}.')
 		self.path_to_slots_configuration_file = path_to_slots_configuration_file
+		self.path_to_oscilloscope_configuration_file = path_to_oscilloscope_configuration_file
 		
 		# Hardware elements ---
 		self._oscilloscope = TeledyneLeCroyPy.LeCroyWaveRunner('USB0::0x05ff::0x1023::4751N40408::INSTR')
@@ -55,7 +55,7 @@ class TheRobocoldBetaSetup:
 	@property
 	def slots_configuration_df(self):
 		"""Returns a data frame with the configuration as specified in
-		the file `configuration`."""
+		the slots configuration file."""
 		if not hasattr(self, '_slots_configuration_df'):
 			self._slots_configuration_df = pandas.read_csv(
 				self.path_to_slots_configuration_file,
@@ -71,6 +71,21 @@ class TheRobocoldBetaSetup:
 				index_col = 'slot_number',
 			)
 		return self._slots_configuration_df.copy()
+	
+	@property
+	def oscilloscope_configuration_df(self):
+		"""Returns a data frame with the configuration specified in the
+		oscilloscope configuration file."""
+		if not hasattr(self, '_oscilloscope_configuration_df'):
+			self._oscilloscope_configuration_df = pandas.read_csv(
+				self.path_to_oscilloscope_configuration_file,
+				dtype = {
+					'n_channel': int,
+					'signal_name': str,
+				},
+				index_col = 'signal_name',
+			)
+		return self._oscilloscope_configuration_df.copy()
 	
 	# Bias voltage power supply ----------------------------------------
 	
@@ -232,7 +247,7 @@ class TheRobocoldBetaSetup:
 			A dictionary of the form `{'Time (s)': np.array, 'Amplitude (V)': np.array}`.
 		"""
 		with self._signal_acquisition_Lock:
-			return self._oscilloscope.get_waveform(channel=self.devices_connections[device_name]['oscilloscope channel']) 
+			return self._oscilloscope.get_waveform(channel=oscilloscope_channel_number) 
 	
 	# Temperature and humidity sensor ----------------------------------
 	
