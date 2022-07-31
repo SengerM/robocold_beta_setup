@@ -12,12 +12,12 @@ class TheRobocoldBetaSetup:
 	"""This class wraps all the hardware so if there are changes it is 
 	easy to adapt. It should be thread safe.
 	"""
-	def __init__(self, path_to_configuration_file:Path):
+	def __init__(self, path_to_slots_configuration_file:Path):
 		"""
 		"""
-		if not isinstance(path_to_configuration_file, Path):
-			raise TypeError(f'`configuration_file` must be of type {type(Path())}, received object of type {type(path_to_configuration_file)}.')
-		self.path_to_configuration_file = path_to_configuration_file
+		if not isinstance(path_to_slots_configuration_file, Path):
+			raise TypeError(f'`path_to_slots_configuration_file` must be of type {type(Path())}, received object of type {type(path_to_slots_configuration_file)}.')
+		self.path_to_slots_configuration_file = path_to_slots_configuration_file
 		
 		# Hardware elements ---
 		self._oscilloscope = TeledyneLeCroyPy.LeCroyWaveRunner('USB0::0x05ff::0x1023::4751N40408::INSTR')
@@ -34,7 +34,7 @@ class TheRobocoldBetaSetup:
 		self._caen_Lock = threading.RLock()
 		self._rf_multiplexer_Lock = threading.RLock()
 		self._robocold_lock = threading.RLock()
-		self._bias_for_slot_Lock = {slot_number: threading.RLock() for slot_number in self.configuration_df.index}
+		self._bias_for_slot_Lock = {slot_number: threading.RLock() for slot_number in self.slots_configuration_df.index}
 		self._signal_acquisition_Lock = threading.RLock() # Locks the oscilloscope and The Castle
 	
 	@property
@@ -44,18 +44,21 @@ class TheRobocoldBetaSetup:
 		a file when you measure something, then later on you know which 
 		instruments were you using."""
 		string =  'Instruments\n'
-		string += '-----------\n'
+		string += '-----------\n\n'
 		for instrument in [self._oscilloscope, self._sensirion, self._caens['13398'], self._caens['139'], self._robocold, self._rf_multiplexer]:
 			string += f'{instrument.idn}\n'
+		string += '\nSlots configuration\n'
+		string += '-------------------\n\n'
+		string += self.slots_configuration_df.to_string(max_rows=999,max_cols=999)
 		return string
 	
 	@property
-	def configuration_df(self):
+	def slots_configuration_df(self):
 		"""Returns a data frame with the configuration as specified in
 		the file `configuration`."""
-		if not hasattr(self, '_configuration_df'):
-			self._configuration_df = pandas.read_csv(
-				self.path_to_configuration_file,
+		if not hasattr(self, '_slots_configuration_df'):
+			self._slots_configuration_df = pandas.read_csv(
+				self.path_to_slots_configuration_file,
 				dtype = {
 					'slot_number': int,
 					'device_name': str,
@@ -67,7 +70,7 @@ class TheRobocoldBetaSetup:
 				},
 				index_col = 'slot_number',
 			)
-		return self._configuration_df.copy()
+		return self._slots_configuration_df.copy()
 	
 	# Bias voltage power supply ----------------------------------------
 	
@@ -197,7 +200,7 @@ class TheRobocoldBetaSetup:
 		"""Commute the RF multiplexer such that the device in the `slot_number`
 		gets connected to the oscilloscope."""
 		with self._signal_acquisition_Lock:
-			self._rf_multiplexer.connect_channel(int(self.configuration_df.loc[slot_number,'The_Castle_channel_number']))
+			self._rf_multiplexer.connect_channel(int(self.slots_configuration_df.loc[slot_number,'The_Castle_channel_number']))
 	
 	def set_oscilloscope_vdiv(self, oscilloscope_channel_number:int, vdiv:float):
 		"""Set the vertical scale of the given channel in the oscilloscope."""
@@ -270,7 +273,7 @@ class TheRobocoldBetaSetup:
 	def move_to_slot(self, slot_number:int):
 		"""Move stages in order to align the beta source and reference
 		detector trigger to the given slot."""
-		slot_position = [int(self.configuration_df.loc[slot_number,p]) for p in ['position_long_stage','position_short_stage']]
+		slot_position = [int(self.slots_configuration_df.loc[slot_number,p]) for p in ['position_long_stage','position_short_stage']]
 		with self._robocold_lock:
 			self._robocold.move_to(tuple(slot_position))
 	
@@ -300,10 +303,10 @@ class TheRobocoldBetaSetup:
 	
 	def get_name_of_device_in_slot_number(self, slot_number:int)->str:
 		"""Get the name of the device in the given slot."""
-		return self.configuration_df.loc[slot_number,'device_name']
+		return self.slots_configuration_df.loc[slot_number,'device_name']
 	
 	def _caen_channel_given_slot_number(self, slot_number:int):
-		caen_serial_number = self.configuration_df.loc[slot_number,'caen_serial_number']
-		caen_channel_number = int(self.configuration_df.loc[slot_number,'caen_channel_number'])
+		caen_serial_number = self.slots_configuration_df.loc[slot_number,'caen_serial_number']
+		caen_channel_number = int(self.slots_configuration_df.loc[slot_number,'caen_channel_number'])
 		return OneCAENChannel(self._caens[caen_serial_number], caen_channel_number)
 

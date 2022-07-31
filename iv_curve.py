@@ -200,7 +200,6 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 		threads.append(thread)
 	
 	with Richard.do_your_magic():
-		the_setup.configuration_df.to_csv(Richard.path_to_default_output_directory/Path('setup_configuration.csv'))
 		with open(Richard.path_to_default_output_directory/Path('setup_description.txt'), 'w') as ofile:
 			print(the_setup.description, file=ofile)
 		
@@ -257,10 +256,10 @@ if __name__=='__main__':
 	import numpy
 	
 	SLOTS = [1,2,3,4,5,6]
-	VOLTAGES = {slot: numpy.linspace(0,777,222) for slot in SLOTS}
+	VOLTAGES = {slot: numpy.linspace(0,777,4) for slot in SLOTS}
 	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}
 	
-	the_setup = TheRobocoldBetaSetup(Path('configuration.csv'))
+	the_setup = TheRobocoldBetaSetup(Path('slots_configuration.csv'))
 	
 	measure_iv_curve_multiple_slots(
 		path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'),
