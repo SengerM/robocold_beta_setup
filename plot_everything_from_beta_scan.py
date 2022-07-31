@@ -37,7 +37,7 @@ def script_core(directory: Path):
 				include_plotlyjs = 'cdn',
 			)
 		
-		df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1)
+		df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
 		path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
 		path_to_save_plots.mkdir()
 		for col in df.columns:
