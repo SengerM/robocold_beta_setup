@@ -7,17 +7,25 @@ from robocoldpy import Robocold, find_Robocold_port # https://github.com/SengerM
 from The_Castle_RF_multiplexer import TheCastle, find_The_Castle_port # https://github.com/SengerM/The_Castle_RF_multiplexer
 from pathlib import Path
 import pandas
+from VotschTechnikClimateChamber.ClimateChamber import ClimateChamber # https://github.com/SengerM/VotschTechnik-climate-chamber-Python
 
 class TheRobocoldBetaSetup:
 	"""This class wraps all the hardware so if there are changes it is 
 	easy to adapt. It should be thread safe.
 	"""
-	def __init__(self, path_to_slots_configuration_file:Path, path_to_oscilloscope_configuration_file:Path):
+	def __init__(self, path_to_slots_configuration_file:Path=None, path_to_oscilloscope_configuration_file:Path=None):
+		if path_to_slots_configuration_file is None:
+			path_to_slots_configuration_file = Path('slots_configuration.csv')
+		if path_to_oscilloscope_configuration_file is None:
+			path_to_oscilloscope_configuration_file = Path('oscilloscope_configuration.csv')
 		for name in {'path_to_oscilloscope_configuration_file','path_to_slots_configuration_file'}:
 			if not isinstance(locals()[name], Path):
 				raise TypeError(f'`{name}` must be of type {type(Path())}, received object of type {type(locals()[name])}.')
 		self.path_to_slots_configuration_file = path_to_slots_configuration_file
 		self.path_to_oscilloscope_configuration_file = path_to_oscilloscope_configuration_file
+		
+		self.slots_configuration_df # This will trigger the load of the file, so if it fails it does now.
+		self.oscilloscope_configuration_df # This will trigger the load of the file, so if it fails it does now.
 		
 		# Hardware elements ---
 		self._oscilloscope = TeledyneLeCroyPy.LeCroyWaveRunner('USB0::0x05ff::0x1023::4751N40408::INSTR')
@@ -28,6 +36,7 @@ class TheRobocoldBetaSetup:
 		}
 		self._robocold = Robocold(find_Robocold_port().device)
 		self._rf_multiplexer = TheCastle(find_The_Castle_port().device)
+		self._climate_chamber = ClimateChamber(ip = '130.60.165.218' , temperature_min = -25, temperature_max = 30)
 		
 		# Threading locks for hardware ---
 		self._sensirion_Lock = threading.RLock()
@@ -36,6 +45,7 @@ class TheRobocoldBetaSetup:
 		self._robocold_lock = threading.RLock()
 		self._bias_for_slot_Lock = {slot_number: threading.RLock() for slot_number in self.slots_configuration_df.index}
 		self._signal_acquisition_Lock = threading.RLock() # Locks the oscilloscope and The Castle
+		self._climate_chamber_Lock = threading.RLock()
 	
 	@property
 	def description(self) -> str:
@@ -43,9 +53,18 @@ class TheRobocoldBetaSetup:
 		which instruments are connected, etc. This is useful to print in
 		a file when you measure something, then later on you know which 
 		instruments were you using."""
+		instruments = [
+			self._oscilloscope, 
+			self._sensirion, 
+			self._caens['13398'], 
+			self._caens['139'], 
+			self._robocold, 
+			self._rf_multiplexer, 
+			self._climate_chamber,
+		]
 		string =  'Instruments\n'
 		string += '-----------\n\n'
-		for instrument in [self._oscilloscope, self._sensirion, self._caens['13398'], self._caens['139'], self._robocold, self._rf_multiplexer]:
+		for instrument in instruments:
 			string += f'{instrument.idn}\n'
 		string += '\nSlots configuration\n'
 		string += '-------------------\n\n'
@@ -314,6 +333,24 @@ class TheRobocoldBetaSetup:
 		with self._robocold_lock:
 			self._robocold.move_to(position)
 	
+	# Climate chamber --------------------------------------------------
+	
+	def set_temperature(self, celsius:float):
+		"""Set the temperature."""
+		with self._climate_chamber_Lock:
+			self._climate_chamber.temperature_set_point = celsius
+	
+	def start_climate_chamber(self):
+		"""Start the climate chamber."""
+		with self._climate_chamber_Lock:
+			self._climate_chamber.dryer = True
+			self._climate_chamber.start()
+	
+	def stop_climate_chamber(self):
+		"""Stop the climate chamber."""
+		with self._climate_chamber_Lock:
+			self._climate_chamber.stop()
+	
 	# Others -----------------------------------------------------------
 	
 	def get_name_of_device_in_slot_number(self, slot_number:int)->str:
@@ -324,4 +361,40 @@ class TheRobocoldBetaSetup:
 		caen_serial_number = self.slots_configuration_df.loc[slot_number,'caen_serial_number']
 		caen_channel_number = int(self.slots_configuration_df.loc[slot_number,'caen_channel_number'])
 		return OneCAENChannel(self._caens[caen_serial_number], caen_channel_number)
+	
+	def turn_whole_setup_off_in_controlled_way(self):
+		"""Turns the whole setup off in a controlled and safe way. This
+		means e.g. setting the bias voltages to 0 before warming up the
+		climate chamber. This function will block the execution until
+		it has finished, which may take about 20 minutes."""
+		with self._caen_Lock, self._climate_chamber_Lock:
+			for slot_number in self.slots_configuration_df.index:
+				self.set_bias_voltage(slot_number, 0, block_until_not_ramping_anymore=False)
+			self.reset_robocold()
+			while any([self.is_ramping_bias_voltage(slot_number) for slot_number in self.slots_configuration_df.index]):
+				sleep(10)
+			# Warming up sequence ---
+			current_set_T = self.temperature
+			while self.temperature < 20:
+				current_set_T += 5
+				self.set_temperature(current_set_T)
+				while self.temperature<current_set_T-1 or self.humidity > 10:
+					sleep(10)
+			self.set_temperature(20)
+			sleep(60) # An extra minute.
+			self.stop_climate_chamber()
+	
+	def start_setup(self):
+		"""Starts the setup in a controlled and safe way. Blocks the 
+		execution until the setup is ready to operate at low temperature."""
+		with self._caen_Lock, self._climate_chamber_Lock:
+			for slot_number in self.slots_configuration_df.index:
+				self.set_bias_voltage(slot_number, 0, block_until_not_ramping_anymore=False)
+			self.reset_robocold()
+			while any([self.is_ramping_bias_voltage(slot_number) for slot_number in self.slots_configuration_df.index]):
+				sleep(10)
+			self.set_temperature(-20)
+			self.start_climate_chamber()
+			while self.temperature > -20:
+				sleep(10)
 
