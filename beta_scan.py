@@ -227,7 +227,10 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 								str(path_to_save_plots/Path(f'n_trigger {n_trigger} signal_name {signal_name}.html')),
 								include_plotlyjs = 'cdn',
 							)
-									
+	
+	if not silent:
+		print('Beta scan finished.')
+	
 	return John.path_to_measurement_base_directory
 
 if __name__=='__main__':
@@ -260,6 +263,6 @@ if __name__=='__main__':
 			bias_voltage = 190,
 			silent = False, 
 			telegram_progress_reporter = reporter,
-			# ~ software_trigger = SOFTWARE_TRIGGER,
+			software_trigger = SOFTWARE_TRIGGER,
 		)
 		plot_everything_from_beta_scan(p)
