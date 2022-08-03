@@ -6,7 +6,7 @@ import time
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-from TheSetup import connect_me_with_me_the_setup
+from TheSetup import connect_me_with_the_setup
 from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import threading
 import warnings
@@ -44,7 +44,7 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 		_locals = locals(),
 	)
 	
-	the_setup = connect_me_with_me_the_setup()
+	the_setup = connect_me_with_the_setup()
 	
 	with the_setup.hold_control_of_bias_for_slot_number(slot_number=slot_number, who=name_to_access_to_the_setup):
 		with John.do_your_magic():
@@ -194,7 +194,7 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 	if set(voltages) != set(current_compliances):
 		raise ValueError(f'The keys of `voltages` and `current_compliances` do not coincide. They should specify the same slot numbers to measure.')
 	
-	the_setup = connect_me_with_me_the_setup()
+	the_setup = connect_me_with_the_setup()
 	
 	threads = []
 	for slot_number in set(voltages):
@@ -272,9 +272,9 @@ if __name__=='__main__':
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}
-	NAME_TO_ACCESS_TO_THE_SETUP = 'IV curves measurement script'
+	NAME_TO_ACCESS_TO_THE_SETUP = f'IV curves measurement script PID: {os.getpid()}'
 	
-	the_setup = connect_me_with_me_the_setup()
+	the_setup = connect_me_with_the_setup()
 	
 	measure_iv_curve_multiple_slots(
 		path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'),

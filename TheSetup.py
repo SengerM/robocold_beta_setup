@@ -446,7 +446,10 @@ class TheRobocoldBetaSetup:
 		because the properties fail in multiprocess applications."""
 		return self.description
 	
-def connect_me_with_me_the_setup():
+	def get_oscilloscope_configuration_df(self)->pandas.DataFrame:
+		return self.oscilloscope_configuration_df
+	
+def connect_me_with_the_setup():
 	class TheSetup(BaseManager):
 		pass
 
