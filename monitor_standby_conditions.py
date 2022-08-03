@@ -19,16 +19,15 @@ PATH_TO_DIRECTORY_WHERE_TO_STORE_DATA = Path.home()/Path('monitor_standby_condit
 NAME_TO_ACCESS_TO_THE_SETUP = f'monitor standby conditions {os.getpid()}'
 # ----------------------------------------------------------------------
 
-def measure_data(slot_number:int, name_to_access_to_the_setup:str, average_at_least_during_seconds:float, average_at_least_n_samples:int)->dict:
+def measure_data(slot_number:int, average_at_least_during_seconds:float, average_at_least_n_samples:int)->dict:
 	the_setup = connect_me_with_the_setup()
-	with the_setup.hold_control_of_bias_for_slot_number(slot_number=slot_number, who=name_to_access_to_the_setup):
-		bias_voltages = []
-		bias_currents = []
-		start_measuring = time.time()
-		while time.time()-start_measuring < average_at_least_during_seconds or len(bias_voltages) < average_at_least_n_samples:
-			bias_voltages.append(the_setup.measure_bias_voltage(slot_number))
-			bias_currents.append(the_setup.measure_bias_current(slot_number))
-			time.sleep(.3) # To avoid overloading communications with hardware.
+	bias_voltages = []
+	bias_currents = []
+	start_measuring = time.time()
+	while time.time()-start_measuring < average_at_least_during_seconds or len(bias_voltages) < average_at_least_n_samples:
+		bias_voltages.append(the_setup.measure_bias_voltage(slot_number))
+		bias_currents.append(the_setup.measure_bias_current(slot_number))
+		time.sleep(.3) # To avoid overloading communications with hardware.
 	measured_data = {
 		'device_name': the_setup.get_name_of_device_in_slot_number(slot_number),
 		'Temperature (°C)': the_setup.measure_temperature(),
@@ -62,14 +61,17 @@ if __name__=='__main__':
 				continue
 			if 'last_time_I_measured' not in locals() or (datetime.datetime.now()-last_time_I_measured).seconds > standby_configuration['Measure once every (s)']:
 				if the_setup.is_bias_slot_number_being_hold_by_someone(slot_number):
-					measured_data = measure_data(slot_number)
+					measured_data = measured_data = measure_data(
+						slot_number = slot_number, 
+						average_at_least_during_seconds = 11,
+						average_at_least_n_samples = 11,
+					)
 				else:
 					with the_setup.hold_control_of_bias_for_slot_number(slot_number = slot_number, who = NAME_TO_ACCESS_TO_THE_SETUP):
 						the_setup.set_current_compliance(slot_number=slot_number, amperes=standby_configuration['Current compliance (A)'], who=NAME_TO_ACCESS_TO_THE_SETUP)
 						the_setup.set_bias_voltage(slot_number=slot_number, volts=standby_configuration['Bias voltage (V)'], who=NAME_TO_ACCESS_TO_THE_SETUP)
 						measured_data = measure_data(
 							slot_number = slot_number, 
-							name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 							average_at_least_during_seconds = 11,
 							average_at_least_n_samples = 11,
 						)
