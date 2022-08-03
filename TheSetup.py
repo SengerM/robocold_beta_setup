@@ -146,6 +146,11 @@ class TheRobocoldBetaSetup:
 		"""
 		return self._bias_for_slot_Lock[slot_number](who)
 	
+	def is_bias_slot_number_being_hold_by_someone(self, slot_number:int):
+		"""Returns `True` if anybody is holding the control of the bias
+		for the given slot number. Otherwise, returns `False`."""
+		return self._bias_for_slot_Lock[slot_number].locked()
+	
 	def measure_bias_voltage(self, slot_number:int)->float:
 		"""Returns the measured bias voltage in the given slot.
 		
