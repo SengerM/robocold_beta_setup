@@ -447,7 +447,14 @@ class TheRobocoldBetaSetup:
 		return self.description
 	
 	def get_oscilloscope_configuration_df(self)->pandas.DataFrame:
+		"""Same as `.oscilloscope_configuration_df` but without the property decorator,
+		because the properties fail in multiprocess applications."""
 		return self.oscilloscope_configuration_df
+	
+	def get_slots_configuration_df(self)->pandas.DataFrame:
+		"""Same as `.slots_configuration_df` but without the property decorator,
+		because the properties fail in multiprocess applications."""
+		return self.slots_configuration_df
 	
 def connect_me_with_the_setup():
 	class TheSetup(BaseManager):
