@@ -477,8 +477,8 @@ if __name__=='__main__':
 	
 	print('Opening the setup...')
 	the_setup = TheRobocoldBetaSetup(
-		path_to_slots_configuration_file = Path('slots_configuration.csv'),
-		path_to_oscilloscope_configuration_file = Path('oscilloscope_configuration.csv'),
+		path_to_slots_configuration_file = Path('configuration_files/slots_configuration.csv'),
+		path_to_oscilloscope_configuration_file = Path('configuration_files/oscilloscope_configuration.csv'),
 	)
 	
 	TheSetupManager.register('get_the_setup', callable=lambda:the_setup)
