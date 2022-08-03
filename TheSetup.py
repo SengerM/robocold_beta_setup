@@ -306,7 +306,7 @@ class TheRobocoldBetaSetup:
 		waveform: dict
 			A dictionary of the form `{'Time (s)': np.array, 'Amplitude (V)': np.array}`.
 		"""
-		with self._signal_acquisition_Lock:
+		with self._oscilloscope_Lock:
 			return self._oscilloscope.get_waveform(channel=oscilloscope_channel_number) 
 	
 	# Temperature and humidity sensor ----------------------------------
