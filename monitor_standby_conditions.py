@@ -4,20 +4,17 @@ import datetime
 import time
 from TheSetup import connect_me_with_the_setup
 from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper # https://github.com/SengerM/huge_dataframe
+import threading
+import warnings
+from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
+import my_telegram_bots
+import traceback
+
+THREADS_SLEEPING_SECONDS = 1
 
 # ----------------------------------------------------------------------
 PATH_TO_DIRECTORY_WHERE_TO_STORE_DATA = Path.home()/Path('monitor_standby_conditions')
 NAME_TO_ACCESS_TO_THE_SETUP = 'monitor standby conditions'
-SILENT = False
-STANDBY_VOLTAGES = {
-	1: 350,
-	2: 544,
-	3: 277,
-	4: 99,
-	5: 500,
-	6: 200,
-	7: 190,
-}
 # ----------------------------------------------------------------------
 
 def measure_data(slot_number: int)->dict:
@@ -39,31 +36,66 @@ PATH_TO_DIRECTORY_WHERE_TO_STORE_DATA.mkdir(exist_ok=True)
 
 the_setup = connect_me_with_the_setup()
 
-with SQLiteDataFrameDumper(PATH_TO_DIRECTORY_WHERE_TO_STORE_DATA/Path('measured_data.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=10, delete_database_if_already_exists=False) as measured_data_dumper:
-	while True:
-		for slot_number in the_setup.get_slots_configuration_df().index:
-			if not SILENT:
-				print(f'Preparing to measure slot number {slot_number}...')
-			
+keep_threads_alive = True
+
+data_to_dump_Lock = threading.RLock()
+data_to_dump = []
+
+def monitor_one_slot(slot_number:int):
+	while keep_threads_alive:
+		try:
+			standby_configuration = pandas.read_csv(Path('configuration_files/standby_configuration.csv'), index_col='slot_number', dtype={'slot_number': int, 'Bias voltage (V)': float, 'Current compliance (A)': float, 'Measure once every (s)': float}).loc[slot_number]
+		except FileNotFoundError as e:
+			warnings.warn(f'Cannot read standby configuration file, reason: `{e}`. Will ignore this and try again.')
+			time.sleep(THREADS_SLEEPING_SECONDS)
+			continue
+		if 'last_time_I_measured' not in locals() or (datetime.datetime.now()-last_time_I_measured).seconds > standby_configuration['Measure once every (s)']:
 			if the_setup.is_bias_slot_number_being_hold_by_someone(slot_number):
-				if not SILENT:
-					print(f'Slot number {slot_number} is being hold by someone else, will anyway measure data under his conditions...')
 				measured_data = measure_data(slot_number)
 			else:
 				with the_setup.hold_control_of_bias_for_slot_number(slot_number = slot_number, who = NAME_TO_ACCESS_TO_THE_SETUP):
-					if not SILENT:
-						print(f'Setting bias voltage to slot number {slot_number}...')
-					the_setup.set_bias_voltage(slot_number=slot_number, volts=STANDBY_VOLTAGES[slot_number], who=NAME_TO_ACCESS_TO_THE_SETUP)
-					time.sleep(5) # Let a bit of time to stabilize.
+					the_setup.set_current_compliance(slot_number=slot_number, amperes=standby_configuration['Current compliance (A)'], who=NAME_TO_ACCESS_TO_THE_SETUP)
+					the_setup.set_bias_voltage(slot_number=slot_number, volts=standby_configuration['Bias voltage (V)'], who=NAME_TO_ACCESS_TO_THE_SETUP)
 					measured_data = measure_data(slot_number)
-			
+			last_time_I_measured = measured_data['When']
 			measured_data_df = pandas.DataFrame(
 				measured_data,
 				index = [0],
 			)
 			measured_data_df.set_index('device_name', inplace=True)
-			measured_data_dumper.append(measured_data_df)
-			if not SILENT:
-				print(f'Slot number {slot_number} was measured.')
-			time.sleep(1)
-		time.sleep(60)
+			with data_to_dump_Lock:
+				data_to_dump.append(measured_data_df)
+		time.sleep(THREADS_SLEEPING_SECONDS)
+
+reporter = TelegramReporter(
+	telegram_token = my_telegram_bots.robobot.token,
+	telegram_chat_id = my_telegram_bots.chat_ids['Long term tests setup'],
+)
+
+with SQLiteDataFrameDumper(PATH_TO_DIRECTORY_WHERE_TO_STORE_DATA/Path('measured_data.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=10, delete_database_if_already_exists=False) as measured_data_dumper:
+	threads = []
+	for slot_number in the_setup.get_slots_configuration_df().index:
+		thread = threading.Thread(target=monitor_one_slot, args=(slot_number,))
+		threads.append(thread)
+	
+	for thread in threads:
+		thread.start()
+	
+	try:
+		while True:
+			if len(data_to_dump) > 0:
+				with data_to_dump_Lock:
+					data_df = pandas.concat(data_to_dump).sort_values('When')
+					measured_data_dumper.append(data_df)
+					data_to_dump = []
+			time.sleep(THREADS_SLEEPING_SECONDS)
+	except Exception as e:
+		print(traceback.format_exc())
+		print(e)
+		reporter.send_message(f'🔥 `monitor_standby_conditions.py` has just crashed. Reason: {e}')
+	finally:
+		keep_threads_alive = False
+		while any([thread.is_alive() for thread in threads]):
+			print(f'{sum([thread.is_alive() for thread in threads])} threads are still alive...')
+			time.sleep(THREADS_SLEEPING_SECONDS)
+	
