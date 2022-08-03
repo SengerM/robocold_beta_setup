@@ -6,12 +6,12 @@ import time
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-from TheSetup import TheRobocoldBetaSetup
+from TheSetup import connect_me_with_me_the_setup
 from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import threading
 import warnings
 
-def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, voltages:list, slot_number:int, n_measurements_per_voltage:int, silent=False)->Path:
+def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_name:str, voltages:list, slot_number:int, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent=False)->Path:
 	"""Measure an IV curve.
 	Parameters
 	----------
@@ -21,12 +21,14 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 		A name for the measurement.
 	n_measurements_per_voltage: int
 		Number of measurements to perform at each voltage.
-	the_setup: TheRobocoldBetaSetup
-		An instance of `TheRobocoldBetaSetup` to control the hardware.
 	voltages: list of float
 		A list with the voltage values.
 	slot_number: int
 		The number of slot in which to measure the IV curve.
+	name_to_access_to_the_setup: str
+		The name to use when accessing to the setup.
+	current_compliance: float
+		The value for the current limit.
 	silent: bool, default False
 		If `True`, no progress messages are printed.
 	
@@ -42,18 +44,21 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 		_locals = locals(),
 	)
 	
-	with the_setup.hold_control_of_bias_for_slot_number(slot_number):
+	the_setup = connect_me_with_me_the_setup()
+	
+	with the_setup.hold_control_of_bias_for_slot_number(slot_number=slot_number, who=name_to_access_to_the_setup):
 		with John.do_your_magic():
 			with SQLiteDataFrameDumper(John.path_to_default_output_directory/Path('measured_data.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=10) as measured_data_dumper:
+				the_setup.set_current_compliance(slot_number=slot_number, amperes=current_compliance, who=name_to_access_to_the_setup)
 				for n_voltage,voltage in enumerate(voltages):
 					if not silent:
 						print(f'Measuring n_voltage={n_voltage}/{len(voltages)-1}...')
 					try:
-						the_setup.set_bias_voltage(slot_number, voltage)
-					except ValueError as e:
-						if str(e) == 'Cannot apply this voltage due to hardware limitations.':
-							warnings.warn(f'Cannot measure slot {slot_number} at voltage {voltage}, reason: `{e}`, will terminate this IV curve measurement.')
-							break # Finish the measurement here, not much more we can do...
+						the_setup.set_bias_voltage(slot_number, voltage, who=name_to_access_to_the_setup)
+					except Exception as e:
+						if '#BD:00,VAL:ERR' in str(e):
+							warnings.warn(f'Cannot measure slot {slot_number} at voltage {voltage}, reason: `{e}`, will skip this point.')
+							continue
 					for n_measurement in range(n_measurements_per_voltage):
 						elapsed_seconds = 9999999999
 						while elapsed_seconds > 5: # Because of multiple threads locking the different elements of the_setup, it can happen that this gets blocked for a long time. Thus, the measured data will no longer belong to a single point in time as we expect...:
@@ -66,8 +71,8 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 									'Set voltage (V)': voltage,
 									'Bias voltage (V)': the_setup.measure_bias_voltage(slot_number),
 									'Bias current (A)': the_setup.measure_bias_current(slot_number),
-									'Temperature (°C)': the_setup.temperature,
-									'Humidity (%RH)': the_setup.humidity,
+									'Temperature (°C)': the_setup.measure_temperature(),
+									'Humidity (%RH)': the_setup.measure_humidity(),
 									'device_name': the_setup.get_name_of_device_in_slot_number(slot_number),
 								},
 								index = [0],
@@ -76,6 +81,8 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 						measured_data_df.set_index(['n_voltage','n_measurement'], inplace=True)
 						measured_data_dumper.append(measured_data_df)
 						time.sleep(.5)
+	if not silent:
+		print(f'Finished measuring IV curve...')
 	
 	# Finished, now do a plot ---
 	measured_data_df = load_whole_dataframe(John.path_to_default_output_directory/Path('measured_data.sqlite'))
@@ -125,7 +132,7 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 
 	return John.path_to_measurement_base_directory
 
-def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Path, measurement_name:str, the_setup:TheRobocoldBetaSetup, voltages:dict, current_compliances:dict, n_measurements_per_voltage:int, silent:bool=False)->Path:
+def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Path, measurement_name:str, voltages:dict, current_compliances:dict, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, silent:bool=False)->Path:
 	"""Measure the IV curve of multiple slots.
 	
 	Parameters
@@ -134,8 +141,8 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 		Path to the directory where to store the data.
 	measurement_name: str
 		A name for the measurement.
-	the_setup: TheRobocoldBetaSetup
-		An instance of `TheRobocoldBetaSetup` to control the hardware.
+	name_to_access_to_the_setup: str
+		The name to use when accessing to the setup.
 	n_measurements_per_voltage: int
 		Number of measurements to perform at each voltage.
 	voltages: dict of lists of floats
@@ -154,23 +161,25 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 	"""
 	
 	class MeasureIVCurveThread(threading.Thread):
-		def __init__(self, name:str, slot_number:int, the_setup:TheRobocoldBetaSetup, voltages_to_measure:list, n_measurements_per_voltage:int, directory_to_store_data:Path, silent:bool):
+		def __init__(self, name:str, slot_number:int, voltages_to_measure:list, n_measurements_per_voltage:int, directory_to_store_data:Path, name_to_access_to_the_setup:str, current_compliance:float, silent:bool):
 			threading.Thread.__init__(self)
 			self.name = name
 			self.slot_number = slot_number
-			self.the_setup = the_setup
+			self.name_to_access_to_the_setup = name_to_access_to_the_setup
 			self.voltages_to_measure = voltages_to_measure
 			self.n_measurements_per_voltage = n_measurements_per_voltage
 			self.directory_to_store_data = directory_to_store_data
+			self.current_compliance = current_compliance
 			self.silent = silent
 		def run(self):
 			measure_iv_curve(
 				path_to_directory_in_which_to_store_data = self.directory_to_store_data,
 				measurement_name = f'IV_curve_{the_setup.get_name_of_device_in_slot_number(self.slot_number)}',
-				the_setup = self.the_setup, 
+				name_to_access_to_the_setup = name_to_access_to_the_setup,
 				voltages = self.voltages_to_measure, 
 				slot_number = self.slot_number, 
 				n_measurements_per_voltage = self.n_measurements_per_voltage, 
+				current_compliance = self.current_compliance,
 				silent = self.silent,
 			)
 	
@@ -185,27 +194,29 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 	if set(voltages) != set(current_compliances):
 		raise ValueError(f'The keys of `voltages` and `current_compliances` do not coincide. They should specify the same slot numbers to measure.')
 	
+	the_setup = connect_me_with_me_the_setup()
+	
 	threads = []
 	for slot_number in set(voltages):
-		the_setup.set_current_compliance(slot_number=slot_number, amperes=current_compliances[slot_number])
 		thread = MeasureIVCurveThread(
 			name = f'IV measuring thread for slot {slot_number}',
 			slot_number = slot_number,
-			the_setup = the_setup,
+			name_to_access_to_the_setup = name_to_access_to_the_setup,
 			voltages_to_measure = voltages[slot_number],
 			n_measurements_per_voltage = n_measurements_per_voltage,
 			directory_to_store_data = Richard.path_to_submeasurements_directory,
+			current_compliance = current_compliances[slot_number],
 			silent = silent,
 		)
 		threads.append(thread)
 	
 	with Richard.do_your_magic():
 		with open(Richard.path_to_default_output_directory/Path('setup_description.txt'), 'w') as ofile:
-			print(the_setup.description, file=ofile)
+			print(the_setup.get_description(), file=ofile)
 		
 		if not silent:
 			print(f'Moving the beta source outside all detectors...')
-		the_setup.place_source_such_that_it_does_not_irradiate_any_DUT()
+		the_setup.place_source_such_that_it_does_not_irradiate_any_DUT(who=name_to_access_to_the_setup)
 		
 		for thread in threads:
 			if not silent:
@@ -254,26 +265,23 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 
 if __name__=='__main__':
 	import numpy
+	import os
 	
-	SLOTS = [1,2,3,4,5,6]
-	VOLTAGES = {slot: numpy.linspace(0,777,4) for slot in SLOTS}
+	SLOTS = [1,2,3,4,5,6,7]
+	VOLTAGE_VALUES = list(numpy.linspace(0,777,99))
+	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
+	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}
+	NAME_TO_ACCESS_TO_THE_SETUP = 'IV curves measurement script'
 	
-	the_setup = TheRobocoldBetaSetup(Path('slots_configuration.csv'))
+	the_setup = connect_me_with_me_the_setup()
 	
 	measure_iv_curve_multiple_slots(
 		path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'),
-		measurement_name = input('Measurement name? '),
-		the_setup = the_setup,
-		voltages = VOLTAGES,
+		measurement_name = input('Measurement name? ').replace(' ','_'),
+		name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
+		voltages = VOLTAGES_FOR_EACH_SLOT,
 		current_compliances = CURRENT_COMPLIANCES,
 		n_measurements_per_voltage = 11,
 		silent = False,
 	)
-	
-	print('Waiting voltages to go down to 0...')
-	for slot in SLOTS:
-		the_setup.set_bias_voltage(slot_number=slot, volts=0, block_until_not_ramping_anymore=False)
-	time.sleep(1)
-	while any([the_setup.is_ramping_bias_voltage(slot_number) for slot_number in SLOTS]):
-		time.sleep(1)
