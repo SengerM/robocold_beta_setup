@@ -446,7 +446,7 @@ class TheRobocoldBetaSetup:
 		because the properties fail in multiprocess applications."""
 		return self.description
 	
-def give_me_the_setup():
+def connect_me_with_me_the_setup():
 	class TheSetup(BaseManager):
 		pass
 
