@@ -63,6 +63,8 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 						if '#BD:00,VAL:ERR' in str(e):
 							warnings.warn(f'Cannot measure slot {slot_number} at voltage {voltage}, reason: `{e}`, will skip this point.')
 							continue
+						else:
+							raise e
 					for n_measurement in range(n_measurements_per_voltage):
 						elapsed_seconds = 9999999999
 						while elapsed_seconds > 5: # Because of multiple threads locking the different elements of the_setup, it can happen that this gets blocked for a long time. Thus, the measured data will no longer belong to a single point in time as we expect...:
@@ -218,20 +220,21 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 		with open(Richard.path_to_default_output_directory/Path('setup_description.txt'), 'w') as ofile:
 			print(the_setup.get_description(), file=ofile)
 		
-		if not silent:
-			print(f'Moving the beta source outside all detectors...')
-		the_setup.place_source_such_that_it_does_not_irradiate_any_DUT(who=name_to_access_to_the_setup)
-		
-		for thread in threads:
+		with the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
 			if not silent:
-				print(f'Starting measurement for slot_number = {thread.slot_number}')
-			thread.start()
-		
-		while any([thread.is_alive() for thread in threads]):
-			time.sleep(1)
+				print(f'Moving the beta source outside all detectors...')
+			the_setup.place_source_such_that_it_does_not_irradiate_any_DUT(who=name_to_access_to_the_setup)
+			
+			for thread in threads:
+				if not silent:
+					print(f'Starting measurement for slot_number = {thread.slot_number}')
+				thread.start()
+			
+			while any([thread.is_alive() for thread in threads]):
+				time.sleep(1)
 		
 		if not silent:
-			print(f'Finished measuring all.')
+			print(f'Finished measuring all IV curves.')
 		
 		# Do a plot...
 		measured_data_list = []
@@ -272,7 +275,7 @@ if __name__=='__main__':
 	import os
 	
 	SLOTS = [1,2,3,4,5,6,7]
-	VOLTAGE_VALUES = list(numpy.linspace(0,777,99))
+	VOLTAGE_VALUES = list(numpy.linspace(0,777,5))
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}
