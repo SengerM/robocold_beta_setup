@@ -153,6 +153,8 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 		if not silent:
 			print('Control of hardware acquired.')
 		with John.do_your_magic():
+			with open(John.path_to_default_output_directory/'setup_description.txt','w') as ofile:
+				print(the_setup.get_description(), file=ofile)
 			with SQLiteDataFrameDumper(John.path_to_default_output_directory/Path('measured_stuff.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as measured_stuff_dumper, SQLiteDataFrameDumper(John.path_to_default_output_directory/Path('waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as waveforms_dumper, SQLiteDataFrameDumper(John.path_to_default_output_directory/Path('parsed_from_waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as parsed_from_waveforms_dumper:
 				if not silent:
 					print(f'Moving beta source to slot number {slot_number}...')

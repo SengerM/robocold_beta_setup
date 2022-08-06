@@ -52,6 +52,8 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 		if not silent:
 			print('Control of hardware acquired.')
 		with John.do_your_magic():
+			with open(John.path_to_default_output_directory/'setup_description.txt','w') as ofile:
+				print(the_setup.get_description(), file=ofile)
 			with SQLiteDataFrameDumper(John.path_to_default_output_directory/Path('measured_data.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=10) as measured_data_dumper:
 				the_setup.set_current_compliance(slot_number=slot_number, amperes=current_compliance, who=name_to_access_to_the_setup)
 				for n_voltage,voltage in enumerate(voltages):
