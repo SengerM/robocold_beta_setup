@@ -64,19 +64,48 @@ class TheRobocoldBetaSetup:
 		which instruments are connected, etc. This is useful to print in
 		a file when you measure something, then later on you know which 
 		instruments were you using."""
-		instruments = [
-			self._oscilloscope, 
-			self._sensirion, 
-			self._caens['13398'], 
-			self._caens['139'], 
-			self._robocold, 
-			self._rf_multiplexer, 
-			self._climate_chamber,
-		]
+		instruments = {
+			'oscilloscope': 
+				{
+					'object': self._oscilloscope,
+					'lock': self._oscilloscope_Lock,
+				},
+			'sensirion': 
+				{
+					'object': self._sensirion,
+					'lock': self._sensirion_Lock,
+				},
+			'caen 1': 
+				{
+					'object': self._caens['13398'],
+					'lock': self._caen_Lock,
+				},
+			'caen 2': 
+				{
+					'object': self._caens['139'],
+					'lock': self._caen_Lock,
+				},
+			'robocold': 
+				{
+					'object': self._robocold, 
+					'lock': self._robocold_Lock,
+				},
+			'rf multiplexer': 
+				{
+					'object': self._rf_multiplexer,
+					'lock': self._rf_multiplexer_Lock,
+				},
+			'climate chamber': 
+				{
+					'object': self._climate_chamber,
+					'lock': self._climate_chamber_Lock,
+				},
+		}
 		string =  'Instruments\n'
 		string += '-----------\n\n'
 		for instrument in instruments:
-			string += f'{instrument.idn}\n'
+			with instruments[instrument]['lock']:
+				string += f'{instruments[instrument]["object"].idn}\n'
 		string += '\nSlots configuration\n'
 		string += '-------------------\n\n'
 		string += self.slots_configuration_df.to_string(max_rows=999,max_cols=999)
@@ -312,7 +341,7 @@ class TheRobocoldBetaSetup:
 			A dictionary of the form `{'Time (s)': np.array, 'Amplitude (V)': np.array}`.
 		"""
 		with self._oscilloscope_Lock:
-			return self._oscilloscope.get_waveform(channel=oscilloscope_channel_number) 
+			return self._oscilloscope.get_waveform(channel=oscilloscope_channel_number)
 	
 	# Temperature and humidity sensor ----------------------------------
 	
