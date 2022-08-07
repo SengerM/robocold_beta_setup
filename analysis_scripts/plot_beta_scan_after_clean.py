@@ -22,14 +22,9 @@ def script_core(path_to_measurement_base_directory: Path):
 	parsed_from_waveforms_df = load_whole_dataframe(John.path_to_output_directory_of_script_named('beta_scan.py')/Path('parsed_from_waveforms.sqlite'))
 	clean_triggers_df = pandas.read_feather(John.path_to_output_directory_of_script_named('clean_beta_scan.py')/Path('result.fd')).set_index('n_trigger')
 	
-	parsed_from_waveforms_df.reset_index(inplace=True, drop=False)
-	parsed_from_waveforms_df.set_index('n_trigger', inplace=True)
-	parsed_from_waveforms_df['accepted'] = clean_triggers_df['accepted']
-	parsed_from_waveforms_df.reset_index(inplace=True, drop=False)
-	parsed_from_waveforms_df.set_index(['n_trigger','signal_name'], inplace=True)
-	
 	with John.do_your_magic():
-		df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
+		df = parsed_from_waveforms_df.merge(right=clean_triggers_df, left_index=True, right_index=True)
+		df = df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
 		path_to_save_plots = John.path_to_default_output_directory/'distributions'
 		path_to_save_plots.mkdir(exist_ok = True)
 		for col in df.columns:
