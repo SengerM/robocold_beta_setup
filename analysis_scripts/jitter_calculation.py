@@ -1,5 +1,5 @@
 import pandas
-from bureaucrat.SmarterBureaucrat import SmarterBureaucrat # https://github.com/SengerM/bureaucrat
+from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
 from pathlib import Path
 import plotly.express as px
 import plotly.graph_objects as go
@@ -227,9 +227,10 @@ def plot_cfd(jitter_df):
 		figs[col] = fig
 	return figs
 
-def process_single_voltage_measurement(path_to_measurement_base_directory:Path, force:bool=False):
-	Norberto = SmarterBureaucrat(
+def jitter_calculation_beta_scan_single_voltage(path_to_measurement_base_directory:Path, force:bool=False):
+	Norberto = NamedTaskBureaucrat(
 		path_to_measurement_base_directory,
+		task_name = 'jitter_calculation_beta_scan_single_voltage',
 		_locals = locals(),
 	)
 	
@@ -393,7 +394,7 @@ if __name__ == '__main__':
 		type = str,
 	)
 	args = parser.parse_args()
-	process_single_voltage_measurement(
+	jitter_calculation_beta_scan_single_voltage(
 		Path(args.directory), 
 		force = True,
 	)
