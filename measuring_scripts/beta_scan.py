@@ -237,6 +237,11 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 
 if __name__=='__main__':
 	import my_telegram_bots
+	PATH_TO_ANALYSIS_SCRIPTS = Path(__file__).parent.parent.resolve()
+	print(PATH_TO_ANALYSIS_SCRIPTS)
+	import sys
+	sys.path.insert(1, PATH_TO_ANALYSIS_SCRIPTS)
+	
 	from plot_everything_from_beta_scan import script_core as plot_everything_from_beta_scan
 	import os
 	
