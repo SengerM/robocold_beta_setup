@@ -7,8 +7,8 @@ import numpy as np
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 
 COLOR_DISCRETE_MAP = {
-	False: '#ff5c5c',
-	True: '#27c200',
+	True: '#ff5c5c',
+	False: '#27c200',
 }
 
 def script_core(path_to_measurement_base_directory: Path):
@@ -28,14 +28,14 @@ def script_core(path_to_measurement_base_directory: Path):
 		path_to_save_plots = John.path_to_default_output_directory/'distributions'
 		path_to_save_plots.mkdir(exist_ok = True)
 		for col in df.columns:
-			if col in {'signal_name','n_trigger','accepted'}:
+			if col in {'signal_name','n_trigger','is_background'}:
 				continue
 			fig = px.histogram(
 				df,
 				title = f'{col} histogram<br><sup>Measurement: {John.measurement_name}</sup>',
 				x = col,
 				facet_row = 'signal_name',
-				color = 'accepted',
+				color = 'is_background',
 				color_discrete_map = COLOR_DISCRETE_MAP,
 			)
 			fig.write_html(
@@ -48,7 +48,7 @@ def script_core(path_to_measurement_base_directory: Path):
 				title = f'{col} ECDF<br><sup>Measurement: {John.measurement_name}</sup>',
 				x = col,
 				facet_row = 'signal_name',
-				color = 'accepted',
+				color = 'is_background',
 				color_discrete_map = COLOR_DISCRETE_MAP,
 			)
 			fig.write_html(
@@ -57,7 +57,7 @@ def script_core(path_to_measurement_base_directory: Path):
 			)
 			
 		columns_for_scatter_matrix_plot = set(df.columns) 
-		columns_for_scatter_matrix_plot -= {'n_trigger','signal_name','accepted'} 
+		columns_for_scatter_matrix_plot -= {'n_trigger','signal_name','is_background'} 
 		columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
 		columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
 		fig = px.scatter_matrix(
@@ -65,7 +65,7 @@ def script_core(path_to_measurement_base_directory: Path):
 			dimensions = sorted(columns_for_scatter_matrix_plot),
 			title = f'Scatter matrix plot<br><sup>Measurement: {John.measurement_name}</sup>',
 			symbol = 'signal_name',
-			color = 'accepted',
+			color = 'is_background',
 			hover_data = ['n_trigger'],
 			color_discrete_map = COLOR_DISCRETE_MAP,
 		)
