@@ -18,7 +18,7 @@ PATH_TO_ANALYSIS_SCRIPTS = Path(__file__).resolve().parent.parent/'analysis_scri
 print(PATH_TO_ANALYSIS_SCRIPTS)
 import sys
 sys.path.append(str(PATH_TO_ANALYSIS_SCRIPTS))
-from plot_everything_from_beta_scan import script_core as plot_everything_from_beta_scan
+from plot_everything_from_beta_scan import plot_everything_from_beta_scan
 
 def parse_waveform(signal:PeakSignal):
 	parsed = {
@@ -29,12 +29,8 @@ def parse_waveform(signal:PeakSignal):
 		'Time over noise (s)': signal.time_over_noise,
 		'Peak start time (s)': signal.peak_start_time,
 		'Whole signal integral (V s)': signal.integral_from_baseline,
+		'SNR': signal.SNR
 	}
-	try:
-		SNR = signal.amplitude/signal.noise
-	except Exception:
-		SNR = float('NaN')
-	parsed['SNR'] = SNR
 	for threshold_percentage in [10,20,30,40,50,60,70,80,90]:
 		try:
 			time_over_threshold = signal.find_time_over_threshold(threshold_percentage)
@@ -300,7 +296,7 @@ def beta_scan_sweeping_bias_voltage(path_to_directory_in_which_to_store_data:Pat
 			with open(John.path_to_default_output_directory/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
 			
-			with reporter.report_for_loop(len(bias_voltages)*n_triggers_per_voltage, measurement_name) as reporter:
+			with reporter.report_for_loop(len(bias_voltages), measurement_name) as reporter:
 				if software_triggers is None:
 					software_triggers = [lambda x: True for v in bias_voltages]
 				for bias_voltage,software_trigger in zip(bias_voltages,software_triggers):
@@ -315,7 +311,7 @@ def beta_scan_sweeping_bias_voltage(path_to_directory_in_which_to_store_data:Pat
 						silent = silent,
 					)
 					plot_everything_from_beta_scan(p)
-				reporter.update(1)
+					reporter.update(1)
 				
 if __name__=='__main__':
 	import os
@@ -336,8 +332,8 @@ if __name__=='__main__':
 		measurement_name = input('Measurement name? ').replace(' ','_'),
 		name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 		slot_number = 7, 
-		n_triggers_per_voltage = 22, 
-		bias_voltages = [150,190],
+		n_triggers_per_voltage = 5, 
+		bias_voltages = [150,160,170,180,190,194],
 		silent = False, 
-		software_triggers = [lambda x: software_trigger(x, A) for A in [.01,.1]],
+		software_triggers = [lambda x: software_trigger(x, A) for A in [.01,.02,.03,.05,.1,.1]],
 	)
