@@ -501,8 +501,16 @@ def connect_me_with_the_setup():
 	return the_setup
 	
 if __name__=='__main__':
+	from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
+	import my_telegram_bots
+	
 	class TheSetupManager(BaseManager):
 		pass
+	
+	reporter = TelegramReporter(
+		telegram_token = my_telegram_bots.robobot.token,
+		telegram_chat_id = my_telegram_bots.chat_ids['Long term tests setup'],
+	)
 	
 	print('Opening the setup...')
 	the_setup = TheRobocoldBetaSetup(
@@ -514,6 +522,7 @@ if __name__=='__main__':
 	m = TheSetupManager(address=('', 50000), authkey=b'abracadabra')
 	s = m.get_server()
 	print('Ready!')
-	s.serve_forever()
-
- 
+	try:
+		s.serve_forever()
+	except Exception as e:
+		reporter.send_message(f'🔥 `TheRobocoldBetaSetup` crashed! Reason: `{repr(e)}`.')
