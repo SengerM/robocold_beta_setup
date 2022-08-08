@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import SmarterBureaucrat # https://github.com/SengerM/bureaucrat
+from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
 from pathlib import Path
 import pandas
 import datetime
@@ -12,7 +12,13 @@ import threading
 import warnings
 from signals.PeakSignal import PeakSignal, draw_in_plotly # https://github.com/SengerM/signals
 from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
+import my_telegram_bots
 import numpy
+PATH_TO_ANALYSIS_SCRIPTS = Path(__file__).resolve().parent.parent/'analysis_scripts'
+print(PATH_TO_ANALYSIS_SCRIPTS)
+import sys
+sys.path.append(str(PATH_TO_ANALYSIS_SCRIPTS))
+from plot_everything_from_beta_scan import script_core as plot_everything_from_beta_scan
 
 def parse_waveform(signal:PeakSignal):
 	parsed = {
@@ -99,7 +105,7 @@ def plot_waveform(signal):
 			pass
 	return fig
 
-def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:str, name_to_access_to_the_setup:str, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False, telegram_progress_reporter:TelegramReporter=None)->Path:
+def beta_scan(path_to_directory_in_which_to_store_data:Path, measurement_name:str, name_to_access_to_the_setup:str, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False)->Path:
 	"""Perform a beta scan.
 	
 	Parameters
@@ -130,8 +136,6 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 		The value for the voltage.
 	silent: bool, default False
 		If `True`, no progress messages are printed.
-	telegram_progress_reporter: TelegramReporter, optional
-		A reporter to update and/or send warnings.
 	
 	Returns
 	-------
@@ -139,13 +143,20 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 		A path to the directory where the measurement's data was stored.
 	"""
 	
-	John = SmarterBureaucrat(
+	John = NamedTaskBureaucrat(
 		path_to_directory_in_which_to_store_data/Path(measurement_name),
+		task_name = 'beta_scan',
 		new_measurement = True,
 		_locals = locals(),
 	)
 	
 	the_setup = connect_me_with_the_setup()
+	
+	reporter = TelegramReporter(
+		telegram_token = my_telegram_bots.robobot.token,
+		telegram_chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
+	)
+	
 	
 	if not silent:
 		print('Waiting for acquiring control of the hardware...')
@@ -166,110 +177,167 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 					print(f'Setting bias voltage {bias_voltage} V to slot number {slot_number}...')
 				the_setup.set_bias_voltage(slot_number=slot_number, volts=bias_voltage, who=name_to_access_to_the_setup)
 				
-				n_waveform = -1
-				for n_trigger in range(n_triggers):
-					# Acquire ---
-					if not silent:
-						print(f'Acquiring n_trigger={n_trigger}/{n_triggers-1}...')
-					
-					do_they_like_this_trigger = False
-					while do_they_like_this_trigger == False:
-						this_trigger_measured_stuff = trigger_and_measure_dut_stuff(slot_number=slot_number, name_to_access_to_the_setup=name_to_access_to_the_setup) # Hold here until there is a trigger.
+				with reporter.report_for_loop(n_triggers, measurement_name) as reporter:
+					n_waveform = -1
+					for n_trigger in range(n_triggers):
+						# Acquire ---
+						if not silent:
+							print(f'Acquiring n_trigger={n_trigger}/{n_triggers-1}...')
 						
-						this_trigger_measured_stuff['When'] = datetime.datetime.now()
-						this_trigger_measured_stuff['n_trigger'] = n_trigger
-						this_trigger_measured_stuff_df = pandas.DataFrame(this_trigger_measured_stuff, index=[0]).set_index(['n_trigger'])
+						do_they_like_this_trigger = False
+						while do_they_like_this_trigger == False:
+							this_trigger_measured_stuff = trigger_and_measure_dut_stuff(slot_number=slot_number, name_to_access_to_the_setup=name_to_access_to_the_setup) # Hold here until there is a trigger.
+							
+							this_trigger_measured_stuff['When'] = datetime.datetime.now()
+							this_trigger_measured_stuff['n_trigger'] = n_trigger
+							this_trigger_measured_stuff_df = pandas.DataFrame(this_trigger_measured_stuff, index=[0]).set_index(['n_trigger'])
+							
+							this_trigger_waveforms_dict = {}
+							for signal_name in the_setup.get_oscilloscope_configuration_df().index:
+								waveform_data = the_setup.get_waveform(oscilloscope_channel_number = the_setup.get_oscilloscope_configuration_df().loc[signal_name,'n_channel'])
+								this_trigger_waveforms_dict[signal_name] = PeakSignal(
+									time = waveform_data['Time (s)'],
+									samples = waveform_data['Amplitude (V)']
+								)
+							
+							if software_trigger is None:
+								do_they_like_this_trigger = True
+							else:
+								do_they_like_this_trigger = software_trigger(this_trigger_waveforms_dict)
 						
-						this_trigger_waveforms_dict = {}
+						# Parse and save data ---
+						measured_stuff_dumper.append(this_trigger_measured_stuff_df)
 						for signal_name in the_setup.get_oscilloscope_configuration_df().index:
-							waveform_data = the_setup.get_waveform(oscilloscope_channel_number = the_setup.get_oscilloscope_configuration_df().loc[signal_name,'n_channel'])
-							this_trigger_waveforms_dict[signal_name] = PeakSignal(
-								time = waveform_data['Time (s)'],
-								samples = waveform_data['Amplitude (V)']
-							)
+							n_waveform += 1
+							
+							waveform_df = pandas.DataFrame({'Time (s)': this_trigger_waveforms_dict[signal_name].time, 'Amplitude (V)': this_trigger_waveforms_dict[signal_name].samples})
+							waveform_df['n_waveform'] = n_waveform
+							waveform_df.set_index('n_waveform', inplace=True)
+							waveforms_dumper.append(waveform_df)
+							
+							parsed_from_waveform = parse_waveform(this_trigger_waveforms_dict[signal_name])
+							parsed_from_waveform['n_trigger'] = n_trigger
+							parsed_from_waveform['signal_name'] = signal_name
+							parsed_from_waveform['n_waveform'] = n_waveform
+							parsed_from_waveform_df = pandas.DataFrame(
+								parsed_from_waveform,
+								index = [0],
+							).set_index(['n_trigger','signal_name'])
+							parsed_from_waveforms_dumper.append(parsed_from_waveform_df)
 						
-						if software_trigger is None:
-							do_they_like_this_trigger = True
-						else:
-							do_they_like_this_trigger = software_trigger(this_trigger_waveforms_dict)
-					
-					# Parse and save data ---
-					measured_stuff_dumper.append(this_trigger_measured_stuff_df)
-					for signal_name in the_setup.get_oscilloscope_configuration_df().index:
-						n_waveform += 1
+						# Plot some of the signals ---
+						if numpy.random.rand()<20/n_triggers:
+							for signal_name in the_setup.get_oscilloscope_configuration_df().index:
+								fig = plot_waveform(this_trigger_waveforms_dict[signal_name])
+								fig.update_layout(
+									title = f'n_trigger {n_trigger}, signal_name {signal_name}<br><sup>Measurement: {measurement_name}</sup>',
+								)
+								path_to_save_plots = John.path_to_default_output_directory/Path('plots of some of the signals')
+								path_to_save_plots.mkdir(exist_ok=True)
+								fig.write_html(
+									str(path_to_save_plots/Path(f'n_trigger {n_trigger} signal_name {signal_name}.html')),
+									include_plotlyjs = 'cdn',
+								)
 						
-						waveform_df = pandas.DataFrame({'Time (s)': this_trigger_waveforms_dict[signal_name].time, 'Amplitude (V)': this_trigger_waveforms_dict[signal_name].samples})
-						waveform_df['n_waveform'] = n_waveform
-						waveform_df.set_index('n_waveform', inplace=True)
-						waveforms_dumper.append(waveform_df)
-						
-						parsed_from_waveform = parse_waveform(this_trigger_waveforms_dict[signal_name])
-						parsed_from_waveform['n_trigger'] = n_trigger
-						parsed_from_waveform['signal_name'] = signal_name
-						parsed_from_waveform['n_waveform'] = n_waveform
-						parsed_from_waveform_df = pandas.DataFrame(
-							parsed_from_waveform,
-							index = [0],
-						).set_index(['n_trigger','signal_name'])
-						parsed_from_waveforms_dumper.append(parsed_from_waveform_df)
-					
-					if telegram_progress_reporter is not None:
-						telegram_progress_reporter.update(1) 
-					
-					# Plot some of the signals ---
-					if numpy.random.rand()<20/n_triggers:
-						for signal_name in the_setup.get_oscilloscope_configuration_df().index:
-							fig = plot_waveform(this_trigger_waveforms_dict[signal_name])
-							fig.update_layout(
-								title = f'n_trigger {n_trigger}, signal_name {signal_name}<br><sup>Measurement: {measurement_name}</sup>',
-							)
-							path_to_save_plots = John.path_to_default_output_directory/Path('plots of some of the signals')
-							path_to_save_plots.mkdir(exist_ok=True)
-							fig.write_html(
-								str(path_to_save_plots/Path(f'n_trigger {n_trigger} signal_name {signal_name}.html')),
-								include_plotlyjs = 'cdn',
-							)
+						reporter.update(1) 
 	
 	if not silent:
 		print('Beta scan finished.')
 	
 	return John.path_to_measurement_base_directory
 
-if __name__=='__main__':
-	import my_telegram_bots
-	PATH_TO_ANALYSIS_SCRIPTS = Path(__file__).parent.parent.resolve()
-	print(PATH_TO_ANALYSIS_SCRIPTS)
-	import sys
-	sys.path.insert(1, PATH_TO_ANALYSIS_SCRIPTS)
+def beta_scan_sweeping_bias_voltage(path_to_directory_in_which_to_store_data:Path, measurement_name:str, name_to_access_to_the_setup:str, slot_number:int, n_triggers_per_voltage:int, bias_voltages:list, software_triggers:list=None, silent=False)->Path:
+	"""Perform multiple beta scans at different bias voltages each.
 	
-	from plot_everything_from_beta_scan import script_core as plot_everything_from_beta_scan
-	import os
+	Parameters
+	----------
+	path_to_directory_in_which_to_store_data: Path
+		Path to the directory where to store the data.
+	measurement_name: str
+		A name for the measurement.
+	n_triggers_per_voltage: int
+		Number of triggers to record on each individual beta scan.
+	name_to_access_to_the_setup: str
+		Name to use when accessing to the setup.
+	slot_number: int
+		The number of slot in which to measure the IV curve.
+	software_trigger: list of callable, optional
+		See documentation on `beta_scan`, in this case it is just a list
+		of such objects one for each voltage.
+	bias_voltage: list of float
+		The bias voltages at which to measure.
+	silent: bool, default False
+		If `True`, no progress messages are printed.
 	
-	N_TRIGGERS = 6666
-	MEASUREMENT_NAME = input('Measurement name? ').replace(' ','_')
-	def SOFTWARE_TRIGGER(signals_dict):
-		DUT_signal = signals_dict['DUT']
-		PMT_signal = signals_dict['reference_trigger']
-		return 0 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 7e-9 and DUT_signal.amplitude > .04
-	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
+	Returns
+	-------
+	path_to_measurement_base_directory: Path
+		A path to the directory where the measurement's data was stored.
+	"""
+	John = NamedTaskBureaucrat(
+		path_to_directory_in_which_to_store_data/Path(measurement_name),
+		task_name = 'beta_scan',
+		new_measurement = True,
+		_locals = locals(),
+	)
 	
-	# ------------------------------------------------------------------
+	the_setup = connect_me_with_the_setup()
 	
 	reporter = TelegramReporter(
 		telegram_token = my_telegram_bots.robobot.token,
 		telegram_chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
 	)
 	
-	with reporter.report_for_loop(N_TRIGGERS, MEASUREMENT_NAME) as reporter:
-		p = script_core(
-			path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'), 
-			measurement_name = MEASUREMENT_NAME, 
-			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
-			slot_number = 7, 
-			n_triggers = N_TRIGGERS, 
-			bias_voltage = 190,
-			silent = False, 
-			telegram_progress_reporter = reporter,
-			software_trigger = SOFTWARE_TRIGGER,
-		)
-		plot_everything_from_beta_scan(p)
+	if software_triggers is not None and len(bias_voltages) != len(software_triggers):
+		raise ValueError(f'The length of `software_triggers` must be the same as the length of `bias_voltages` as one trigger is for each bias voltage.')
+
+	if not silent:
+		print('Waiting for acquiring control of the hardware...')
+	with the_setup.hold_signal_acquisition(who=name_to_access_to_the_setup), the_setup.hold_control_of_bias_for_slot_number(slot_number, who=name_to_access_to_the_setup), the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
+		if not silent:
+			print('Control of hardware acquired.')
+		with John.do_your_magic():
+			with open(John.path_to_default_output_directory/'setup_description.txt','w') as ofile:
+				print(the_setup.get_description(), file=ofile)
+			
+			with reporter.report_for_loop(len(bias_voltages)*n_triggers_per_voltage, measurement_name) as reporter:
+				if software_triggers is None:
+					software_triggers = [lambda x: True for v in bias_voltages]
+				for bias_voltage,software_trigger in zip(bias_voltages,software_triggers):
+					p = beta_scan(
+						path_to_directory_in_which_to_store_data = John.path_to_submeasurements_directory,
+						measurement_name = f'{measurement_name}_{bias_voltage}V',
+						name_to_access_to_the_setup = name_to_access_to_the_setup,
+						slot_number = slot_number,
+						n_triggers = n_triggers_per_voltage,
+						bias_voltage = bias_voltage,
+						software_trigger = software_trigger,
+						silent = silent,
+					)
+					plot_everything_from_beta_scan(p)
+				reporter.update(1)
+				
+if __name__=='__main__':
+	import os
+	
+	def software_trigger(signals_dict, minimum_DUT_amplitude:float):
+		DUT_signal = signals_dict['DUT']
+		PMT_signal = signals_dict['reference_trigger']
+		is_peak_in_correct_time_window = 0 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 7e-9 
+		is_DUT_amplitude_above_threshold = DUT_signal.amplitude > minimum_DUT_amplitude
+		return is_peak_in_correct_time_window and is_DUT_amplitude_above_threshold
+	
+	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
+	
+	# ------------------------------------------------------------------
+	
+	beta_scan_sweeping_bias_voltage(
+		path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'), 
+		measurement_name = input('Measurement name? ').replace(' ','_'),
+		name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
+		slot_number = 7, 
+		n_triggers_per_voltage = 22, 
+		bias_voltages = [150,190],
+		silent = False, 
+		software_triggers = [lambda x: software_trigger(x, A) for A in [.01,.1]],
+	)
