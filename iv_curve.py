@@ -277,7 +277,7 @@ if __name__=='__main__':
 	import os
 	
 	SLOTS = [1,2,3,4,5,6,7]
-	VOLTAGE_VALUES = list(numpy.linspace(0,777,5))
+	VOLTAGE_VALUES = list(numpy.linspace(0,777,33))
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}

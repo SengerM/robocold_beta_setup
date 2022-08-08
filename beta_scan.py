@@ -240,12 +240,12 @@ if __name__=='__main__':
 	from plot_everything_from_beta_scan import script_core as plot_everything_from_beta_scan
 	import os
 	
-	N_TRIGGERS = 1111
+	N_TRIGGERS = 6666
 	MEASUREMENT_NAME = input('Measurement name? ').replace(' ','_')
 	def SOFTWARE_TRIGGER(signals_dict):
 		DUT_signal = signals_dict['DUT']
 		PMT_signal = signals_dict['reference_trigger']
-		return 0 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 7e-9
+		return 0 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 7e-9 and DUT_signal.amplitude > .04
 	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
 	
 	# ------------------------------------------------------------------
