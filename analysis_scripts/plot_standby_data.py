@@ -2,6 +2,9 @@ from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from pathlib import Path
+import sys
+sys.path.append(str(Path(__file__).resolve().parent.parent/'measuring_scripts'))
 from monitor_standby_conditions import PATH_TO_DIRECTORY_WHERE_TO_STORE_DATA as path_to_directory_with_monitored_data
 
 def do_IV_vs_when_plot(measured_data_df):

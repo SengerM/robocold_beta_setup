@@ -54,7 +54,7 @@ if __name__=='__main__':
 	def monitor_one_slot(slot_number:int):
 		while keep_threads_alive:
 			try:
-				standby_configuration = pandas.read_csv(Path('configuration_files/standby_configuration.csv'), index_col='slot_number', dtype={'slot_number': int, 'Bias voltage (V)': float, 'Current compliance (A)': float, 'Measure once every (s)': float}).loc[slot_number]
+				standby_configuration = pandas.read_csv(Path(__file__).resolve().parent/Path('configuration_files/standby_configuration.csv'), index_col='slot_number', dtype={'slot_number': int, 'Bias voltage (V)': float, 'Current compliance (A)': float, 'Measure once every (s)': float}).loc[slot_number]
 			except FileNotFoundError as e:
 				warnings.warn(f'Cannot read standby configuration file, reason: `{e}`. Will ignore this and try again.')
 				time.sleep(THREADS_SLEEPING_SECONDS)
@@ -100,6 +100,7 @@ if __name__=='__main__':
 			thread.start()
 		
 		try:
+			print('Monitoring in process!')
 			while True:
 				if len(data_to_dump) > 0:
 					with data_to_dump_Lock:
