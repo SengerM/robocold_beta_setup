@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import SmarterBureaucrat # https://github.com/SengerM/bureaucrat
+from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
 from pathlib import Path
 import pandas
 import plotly.graph_objects as go
@@ -6,9 +6,10 @@ import plotly.express as px
 import numpy as np
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 
-def script_core(directory: Path):
-	John = SmarterBureaucrat(
+def plot_everything_from_beta_scan(directory: Path):
+	John = NamedTaskBureaucrat(
 		directory,
+		task_name = 'plot_everything_from_beta_scan',
 		_locals = locals(),
 	)
 	
@@ -106,4 +107,4 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	script_core(Path(args.directory))
+	plot_everything_from_beta_scan(Path(args.directory))
