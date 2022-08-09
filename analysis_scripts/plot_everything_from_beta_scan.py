@@ -154,7 +154,7 @@ def plot_everything_from_beta_scan(directory: Path):
 		for col in {'Amplitude (V)','Collected charge (V s)'}:
 			fig = go.Figure()
 			fig.update_layout(
-				title = f'Langauss fit to {col}',
+				title = f'Langauss fit to {col}<br><sup>Measurement: {John.measurement_name}</sup>',
 				xaxis_title = col,
 				yaxis_title = 'count',
 			)
