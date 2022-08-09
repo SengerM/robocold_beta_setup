@@ -332,8 +332,8 @@ if __name__=='__main__':
 		measurement_name = input('Measurement name? ').replace(' ','_'),
 		name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 		slot_number = 7, 
-		n_triggers_per_voltage = 5, 
+		n_triggers_per_voltage = 1111,
 		bias_voltages = [150,160,170,180,190,194],
 		silent = False, 
-		software_triggers = [lambda x: software_trigger(x, A) for A in [.01,.02,.03,.05,.1,.1]],
+		software_triggers = [lambda x,A=A: software_trigger(x, A) for A in [.01,.02,.03,.05,.1,.1]],
 	)
