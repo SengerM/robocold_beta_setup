@@ -10,7 +10,7 @@ from scipy.optimize import curve_fit
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import shutil
 
-N_BOOTSTRAP = 55
+N_BOOTSTRAP = 99
 STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION = 'sigma_from_gaussian_fit' # For the time resolution I will use the `sigma_from_gaussian_fit` because in practice ends up being the most robust and reliable of all.
 
 def kMAD(x,nan_policy='omit'):
@@ -456,8 +456,15 @@ if __name__ == '__main__':
 		dest = 'directory',
 		type = str,
 	)
+	parser.add_argument(
+		'--force',
+		help = 'If this flag is passed, it will force the calculation even if it was already done beforehand. Old data will be deleted.',
+		required = False,
+		dest = 'force',
+		action = 'store_true'
+	)
 	args = parser.parse_args()
 	script_core(
 		Path(args.directory), 
-		force = True,
+		force = args.force,
 	)
