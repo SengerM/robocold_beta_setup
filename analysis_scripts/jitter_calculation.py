@@ -236,7 +236,7 @@ def jitter_calculation_beta_scan_single_voltage(path_to_measurement_base_directo
 	
 	Norberto.check_required_scripts_were_run_before('beta_scan.py')
 	
-	if force == False and Norberto.script_was_applied_without_errors(): # If this was already done, don't do it again...
+	if force == False and Norberto.task_was_applied_without_errors(): # If this was already done, don't do it again...
 		return
 	
 	with Norberto.do_your_magic():
@@ -381,6 +381,69 @@ def jitter_calculation_beta_scan_single_voltage(path_to_measurement_base_directo
 			include_plotlyjs = 'cdn',
 		)
 
+def jitter_calculation_beta_scan_sweeping_voltage(path_to_measurement_base_directory:Path, force_calculation_on_submeasurements:bool=False):
+	Norberto = NamedTaskBureaucrat(
+		path_to_measurement_base_directory,
+		task_name = 'jitter_calculation_beta_scan_sweeping_voltage',
+		_locals = locals(),
+	)
+	
+	Norberto.check_required_tasks_were_run_before('beta_scan')
+	
+	with Norberto.do_your_magic():
+		jitters = []
+		for submeasurement_name, path_to_submeasurement in Norberto.find_submeasurements_of_task('beta_scan').items():
+			jitter_calculation_beta_scan_single_voltage(
+				path_to_measurement_base_directory = path_to_submeasurement, 
+				force = force_calculation_on_submeasurements,
+			)
+			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='no_task', _locals=locals())
+			submeasurement_jitter = pandas.read_csv(
+				Raul.path_to_output_directory_of_task_named('jitter_calculation_beta_scan_single_voltage')/'jitter.csv',
+				names = ['variable_name','value'],
+			)
+			submeasurement_jitter.set_index('variable_name', inplace=True)
+			submeasurement_jitter = submeasurement_jitter['value']
+			submeasurement_jitter['submeasurement_name'] = submeasurement_name
+			submeasurement_jitter['Bias voltage (V)'] = float(submeasurement_name.split('_')[-1].replace('V',''))
+			jitters.append(submeasurement_jitter)
+		
+		jitter_df = pandas.DataFrame.from_records(jitters)
+		jitter_df.columns.rename('', inplace=True)
+		jitter_df.to_csv(Norberto.path_to_default_output_directory/'jitter_vs_bias_voltage.csv', index=False)
+		
+		fig = px.line(
+			jitter_df.sort_values('Bias voltage (V)'),
+			x = 'Bias voltage (V)',
+			y = 'Jitter (s)',
+			error_y = 'Jitter (s) error',
+			markers = True,
+			title = f'Jitter vs bias voltage<br><sup>Measurement: {Norberto.measurement_name}</sup>',
+		)
+		fig.write_html(
+			str(Norberto.path_to_default_output_directory/'jitter_vs_bias_voltage.html'),
+			include_plotlyjs = 'cdn',
+		)
+
+def script_core(path_to_measurement_base_directory:Path, force:bool=False):
+	Nestor = NamedTaskBureaucrat(
+		path_to_measurement_base_directory,
+		task_name = 'jitter_calculation_script_core',
+		_locals = locals(),
+	)
+	if Nestor.task_was_applied_without_errors('beta_scan_sweeping_bias_voltage'):
+		jitter_calculation_beta_scan_sweeping_voltage(
+			path_to_measurement_base_directory = path_to_measurement_base_directory,
+			force_calculation_on_submeasurements = force,
+		)
+	elif Nestor.task_was_applied_without_errors('beta_scan'):
+		jitter_calculation_beta_scan_single_voltage(
+			path_to_measurement_base_directory = path_to_measurement_base_directory,
+			force = force,
+		)
+	else:
+		raise RuntimeError(f'Cannot process {path_to_measurement_base_directory} becasue I cannot find any of my known scripts to have ended successfully.')
+
 if __name__ == '__main__':
 	import argparse
 
@@ -394,7 +457,7 @@ if __name__ == '__main__':
 		type = str,
 	)
 	args = parser.parse_args()
-	jitter_calculation_beta_scan_single_voltage(
+	script_core(
 		Path(args.directory), 
 		force = True,
 	)
