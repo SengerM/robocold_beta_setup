@@ -63,6 +63,40 @@ def binned_fit_langauss(samples, bins='auto', nan_policy='drop'):
 	)
 	return popt, pcov, hist, bin_centers
 
+def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, column_name, line_color):
+	samples = parsed_from_waveforms_df.loc[pandas.IndexSlice[:, signal_name], column_name]
+	popt, _, hist, bin_centers = binned_fit_langauss(samples)
+	
+	fig.add_trace(
+		scatter_histogram(
+			samples = samples,
+			error_y = dict(type='auto'),
+			density = False,
+			name = f'Data {signal_name}',
+			line = dict(color = line_color),
+			legendgroup = signal_name,
+		)
+	)
+	x_axis = np.linspace(min(bin_centers),max(bin_centers),999)
+	fig.add_trace(
+		go.Scatter(
+			x = x_axis,
+			y = langauss.pdf(x_axis, *popt)*len(samples)*np.diff(bin_centers)[0],
+			name = f'Langauss fit {signal_name}<br>x<sub>MPV</sub>={popt[0]:.2e}<br>ξ={popt[1]:.2e}<br>σ={popt[2]:.2e}',
+			line = dict(color = line_color, dash='dash'),
+			legendgroup = signal_name,
+		)
+	)
+	fig.add_trace(
+		go.Scatter(
+			x = x_axis,
+			y = landau.pdf(x_axis, popt[0], popt[1])*len(samples)*np.diff(bin_centers)[0],
+			name = f'Landau component {signal_name}',
+			line = dict(color = f'rgba{hex_to_rgba(line_color, .3)}', dash='dashdot'),
+			legendgroup = signal_name,
+		)
+	)
+
 def plot_everything_from_beta_scan(directory: Path):
 	John = NamedTaskBureaucrat(
 		directory,
@@ -160,38 +194,12 @@ def plot_everything_from_beta_scan(directory: Path):
 			)
 			colors = iter(px.colors.qualitative.Plotly)
 			for signal_name in sorted(set(parsed_from_waveforms_df.index.get_level_values('signal_name'))):
-				samples = parsed_from_waveforms_df.loc[pandas.IndexSlice[:, signal_name], col]
-				popt, _, hist, bin_centers = binned_fit_langauss(samples)
-				this_signal_name_color = next(colors)
-				
-				fig.add_trace(
-					scatter_histogram(
-						samples = samples,
-						error_y = dict(type='auto'),
-						density = False,
-						name = f'Data {signal_name}',
-						line = dict(color = this_signal_name_color),
-						legendgroup = signal_name,
-					)
-				)
-				x_axis = np.linspace(min(bin_centers),max(bin_centers),999)
-				fig.add_trace(
-					go.Scatter(
-						x = x_axis,
-						y = langauss.pdf(x_axis, *popt)*len(samples)*np.diff(bin_centers)[0],
-						name = f'Langauss fit {signal_name}<br>x<sub>MPV</sub>={popt[0]:.2e}<br>ξ={popt[1]:.2e}<br>σ={popt[2]:.2e}',
-						line = dict(color = this_signal_name_color, dash='dash'),
-						legendgroup = signal_name,
-					)
-				)
-				fig.add_trace(
-					go.Scatter(
-						x = x_axis,
-						y = landau.pdf(x_axis, popt[0], popt[1])*len(samples)*np.diff(bin_centers)[0],
-						name = f'Landau component {signal_name}',
-						line = dict(color = f'rgba{hex_to_rgba(this_signal_name_color, .3)}', dash='dashdot'),
-						legendgroup = signal_name,
-					)
+				draw_histogram_and_langauss_fit(
+					fig = fig,
+					parsed_from_waveforms_df = parsed_from_waveforms_df,
+					signal_name = signal_name,
+					column_name = col,
+					line_color = next(colors),
 				)
 			fig.write_html(
 				str(path_to_save_plots/Path(f'{col} langauss fit.html')),
