@@ -5,6 +5,97 @@ import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
+from scipy.stats import median_abs_deviation
+from scipy.optimize import curve_fit
+from landaupy import langauss, landau # https://github.com/SengerM/landaupy
+from grafica.plotly_utils.utils import scatter_histogram # https://github.com/SengerM/grafica
+
+def hex_to_rgba(h, alpha):
+    return tuple([int(h.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)] + [alpha])
+
+def binned_fit_langauss(samples, bins='auto', nan_policy='drop'):
+	"""Perform a binned fit of a langauss distribution.
+	
+	Arguments
+	---------
+	samples: array
+		Array of samples that are believed to follow a Langauss distribution.
+	bins:
+		Same as in numpy.histogram.
+	nan_policy: str, default `'remove'`
+		What to do with NaN values.
+	
+	Returns
+	-------
+	popt:
+		See scipy.optimize.curve_fit.
+	pcov:
+		See scipy.optimize.curve_fit.
+	hist:
+		See numpy.histogram.
+	bin_centers:
+		Same idea as in numpy.histogram but centers instead of edges.
+	"""
+	if nan_policy == 'drop':
+		samples = samples[~np.isnan(samples)]
+	else:
+		raise NotImplementedError(f'`nan_policy={nan_policy}` not implemented.')
+	if len(samples) == 0:
+		raise ValueError(f'`samples` is an empty array.')
+	hist, bin_edges = np.histogram(samples, bins, density=True)
+	bin_centers = bin_edges[:-1] + np.diff(bin_edges)/2
+	# Add an extra bin to the left:
+	hist = np.insert(hist, 0, sum(samples<bin_edges[0]))
+	bin_centers = np.insert(bin_centers, 0, bin_centers[0]-np.diff(bin_edges)[0])
+	# Add an extra bin to the right:
+	hist = np.append(hist,sum(samples>bin_edges[-1]))
+	bin_centers = np.append(bin_centers, bin_centers[-1]+np.diff(bin_edges)[0])
+	landau_x_mpv_guess = bin_centers[np.argmax(hist)]
+	landau_xi_guess = median_abs_deviation(samples)/5
+	gauss_sigma_guess = landau_xi_guess/10
+	popt, pcov = curve_fit(
+		lambda x, mpv, xi, sigma: langauss.pdf(x, mpv, xi, sigma),
+		xdata = bin_centers,
+		ydata = hist,
+		p0 = [landau_x_mpv_guess, landau_xi_guess, gauss_sigma_guess],
+		absolute_sigma = True,
+		# ~ bounds = ([0]*3, [float('inf')]*3), # Don't know why setting the limits make this to fail.
+	)
+	return popt, pcov, hist, bin_centers
+
+def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, column_name, line_color):
+	samples = parsed_from_waveforms_df.loc[pandas.IndexSlice[:, signal_name], column_name]
+	popt, _, hist, bin_centers = binned_fit_langauss(samples)
+	
+	fig.add_trace(
+		scatter_histogram(
+			samples = samples,
+			error_y = dict(type='auto'),
+			density = False,
+			name = f'Data {signal_name}',
+			line = dict(color = line_color),
+			legendgroup = signal_name,
+		)
+	)
+	x_axis = np.linspace(min(bin_centers),max(bin_centers),999)
+	fig.add_trace(
+		go.Scatter(
+			x = x_axis,
+			y = langauss.pdf(x_axis, *popt)*len(samples)*np.diff(bin_centers)[0],
+			name = f'Langauss fit {signal_name}<br>x<sub>MPV</sub>={popt[0]:.2e}<br>ξ={popt[1]:.2e}<br>σ={popt[2]:.2e}',
+			line = dict(color = line_color, dash='dash'),
+			legendgroup = signal_name,
+		)
+	)
+	fig.add_trace(
+		go.Scatter(
+			x = x_axis,
+			y = landau.pdf(x_axis, popt[0], popt[1])*len(samples)*np.diff(bin_centers)[0],
+			name = f'Landau component {signal_name}',
+			line = dict(color = f'rgba{hex_to_rgba(line_color, .3)}', dash='dashdot'),
+			legendgroup = signal_name,
+		)
+	)
 
 def plot_everything_from_beta_scan(directory: Path):
 	John = NamedTaskBureaucrat(
@@ -92,8 +183,29 @@ def plot_everything_from_beta_scan(directory: Path):
 				include_plotlyjs = 'cdn',
 			)
 		
-########################################################################
-
+		path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
+		path_to_save_plots.mkdir(exist_ok=True)
+		for col in {'Amplitude (V)','Collected charge (V s)'}:
+			fig = go.Figure()
+			fig.update_layout(
+				title = f'Langauss fit to {col}<br><sup>Measurement: {John.measurement_name}</sup>',
+				xaxis_title = col,
+				yaxis_title = 'count',
+			)
+			colors = iter(px.colors.qualitative.Plotly)
+			for signal_name in sorted(set(parsed_from_waveforms_df.index.get_level_values('signal_name'))):
+				draw_histogram_and_langauss_fit(
+					fig = fig,
+					parsed_from_waveforms_df = parsed_from_waveforms_df,
+					signal_name = signal_name,
+					column_name = col,
+					line_color = next(colors),
+				)
+			fig.write_html(
+				str(path_to_save_plots/Path(f'{col} langauss fit.html')),
+				include_plotlyjs = 'cdn',
+			)
+		
 if __name__ == '__main__':
 	import argparse
 

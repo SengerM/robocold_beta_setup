@@ -272,7 +272,7 @@ def beta_scan_sweeping_bias_voltage(path_to_directory_in_which_to_store_data:Pat
 	"""
 	John = NamedTaskBureaucrat(
 		path_to_directory_in_which_to_store_data/Path(measurement_name),
-		task_name = 'beta_scan',
+		task_name = 'beta_scan_sweeping_bias_voltage',
 		new_measurement = True,
 		_locals = locals(),
 	)

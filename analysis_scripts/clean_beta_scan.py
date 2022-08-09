@@ -6,6 +6,7 @@ from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github
 import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
+from plot_everything_from_beta_scan import draw_histogram_and_langauss_fit
 
 def apply_cuts(data_df, cuts_df):
 	"""
@@ -85,7 +86,6 @@ def clean_beta_scan(path_to_measurement_base_directory:Path, path_to_cuts_file:P
 		filtered_triggers_df.reset_index().to_feather(John.path_to_default_output_directory/Path('result.fd'))
 
 def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path):
-	
 	COLOR_DISCRETE_MAP = {
 		True: '#ff5c5c',
 		False: '#27c200',
@@ -163,7 +163,27 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path):
 			str(John.path_to_default_output_directory/Path('scatter matrix plot.html')),
 			include_plotlyjs = 'cdn',
 		)
-########################################################################
+		
+		for col in {'Amplitude (V)','Collected charge (V s)'}:
+			fig = go.Figure()
+			fig.update_layout(
+				title = f'Langauss fit to {col} after cleaning<br><sup>Measurement: {John.measurement_name}</sup>',
+				xaxis_title = col,
+				yaxis_title = 'count',
+			)
+			colors = iter(px.colors.qualitative.Plotly)
+			for signal_name in sorted(set(parsed_from_waveforms_df.index.get_level_values('signal_name'))):
+				draw_histogram_and_langauss_fit(
+					fig = fig,
+					parsed_from_waveforms_df = parsed_from_waveforms_df.merge(right=clean_triggers_df, left_index=True, right_index=True).query('is_background==False'),
+					signal_name = signal_name,
+					column_name = col,
+					line_color = next(colors),
+				)
+			fig.write_html(
+				str(John.path_to_default_output_directory/Path(f'langauss fit to {col}.html')),
+				include_plotlyjs = 'cdn',
+			)
 
 if __name__ == '__main__':
 	import argparse
