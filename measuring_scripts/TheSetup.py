@@ -451,11 +451,11 @@ class TheRobocoldBetaSetup:
 			while any([self.is_ramping_bias_voltage(slot_number) for slot_number in self.slots_configuration_df.index]):
 				sleep(10)
 			# Warming up sequence ---
-			current_set_T = self.temperature
-			while self.temperature < 20:
+			current_set_T = self.measure_temperature()
+			while self.measure_temperature() < 20:
 				current_set_T += 5
 				self.set_temperature(current_set_T)
-				while self.temperature<current_set_T-1 or self.humidity > 10:
+				while self.measure_temperature()<current_set_T-1 or self.measure_humidity() > 10:
 					sleep(10)
 			self.set_temperature(20)
 			sleep(60) # An extra minute.
@@ -472,7 +472,7 @@ class TheRobocoldBetaSetup:
 				sleep(10)
 			self.set_temperature(-20)
 			self.start_climate_chamber()
-			while self.temperature > -20:
+			while self.measure_temperature() > -20:
 				sleep(10)
 	
 	def get_description(self)->str:
