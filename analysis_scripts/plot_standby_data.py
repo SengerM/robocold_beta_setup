@@ -22,11 +22,11 @@ def do_IV_vs_when_plot(measured_data_df):
 					legendgroup = device_name,
 					showlegend = row_idx == 0,
 					line_color = current_color,
-					# ~ error_y=dict(
-						# ~ type = 'data',
-						# ~ array = measured_data_df.loc[device_name,f'{var_name} std'],
-						# ~ visible = True,
-					# ~ ),
+					error_y=dict(
+						type = 'data',
+						array = measured_data_df.loc[device_name,f'{var_name} std'],
+						visible = True,
+					),
 				),
 				row = row_idx+1,
 				col = 1,
