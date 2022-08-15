@@ -1,11 +1,9 @@
+from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pathlib import Path
-import sys
-sys.path.append(str(Path(__file__).resolve().parent.parent/'measuring_scripts'))
-from monitor_standby_conditions import PATH_TO_DIRECTORY_WHERE_TO_STORE_DATA as path_to_directory_with_monitored_data
 
 def do_IV_vs_when_plot(measured_data_df):
 	IV_vs_when_plot = make_subplots(cols=1, rows=2, shared_xaxes=True, vertical_spacing=0.02)
@@ -24,24 +22,31 @@ def do_IV_vs_when_plot(measured_data_df):
 					legendgroup = device_name,
 					showlegend = row_idx == 0,
 					line_color = current_color,
-					error_y=dict(
-						type = 'data',
-						array = measured_data_df.loc[device_name,f'{var_name} std'],
-						visible = True,
-					),
+					# ~ error_y=dict(
+						# ~ type = 'data',
+						# ~ array = measured_data_df.loc[device_name,f'{var_name} std'],
+						# ~ visible = True,
+					# ~ ),
 				),
 				row = row_idx+1,
 				col = 1,
 			)
 	return IV_vs_when_plot
 
-measured_data_df = load_whole_dataframe(path_to_directory_with_monitored_data/'measured_data.sqlite')
-measured_data_df['Bias voltage (V)'] *= -1
-
-print(measured_data_df)
-
-fig = do_IV_vs_when_plot(measured_data_df)
-fig.write_html(
-	str(path_to_directory_with_monitored_data/'bias current.html'),
-	include_plotlyjs = 'cdn',
+Norbert = NamedTaskBureaucrat(
+	Path('/home/sengerm/measurements_data')/'20220815000000_monitoring_standby_conditions',
+	task_name = 'plot_standby_data',
+	_locals = locals(),
 )
+
+with Norbert.do_your_magic():
+	measured_data_df = load_whole_dataframe(Norbert.path_to_output_directory_of_task_named('monitor_standby_conditions')/'measured_data.sqlite')
+	measured_data_df['Bias voltage (V)'] *= -1
+	
+	print(measured_data_df)
+	
+	fig = do_IV_vs_when_plot(measured_data_df)
+	fig.write_html(
+		str(Norbert.path_to_default_output_directory/'bias_voltage_and_current.html'),
+		include_plotlyjs = 'cdn',
+	)
