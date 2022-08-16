@@ -108,7 +108,8 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 	)
 	
 	with Alberto.do_your_magic(clean_default_output_directory = False):
-		with SQLiteDataFrameDumper(Alberto.path_to_default_output_directory/Path('measured_data.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=10, delete_database_if_already_exists=False) as measured_data_dumper:
+		path_to_sqlite_database = Alberto.path_to_default_output_directory/Path('measured_data.sqlite')
+		with SQLiteDataFrameDumper(path_to_sqlite_database, dump_after_n_appends=1e3, dump_after_seconds=10, delete_database_if_already_exists=False) as measured_data_dumper:
 			threads = []
 			for slot_number in the_setup.get_slots_configuration_df().index:
 				thread = threading.Thread(target=monitor_one_slot, args=(slot_number,))
@@ -119,6 +120,7 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 			
 			try:
 				if not silent:
+					print(f'Data will be stored into {path_to_sqlite_database}')
 					print('Monitoring in process!')
 				while True:
 					if len(data_to_dump) > 0:
@@ -142,7 +144,7 @@ if __name__=='__main__':
 	
 	script_core(
 		path_to_directory_in_which_to_store_data = Path('/home/sengerm/measurements_data'),
-		measurement_name = '20220815000000_monitoring_standby_conditions',
-		name_to_access_to_the_setup = f'monitor standby conditions {os.getpid()}',
+		measurement_name = '20220816000000_Robocold_setup_test_run',
+		name_to_access_to_the_setup = f'monitoring_standby_conditions_{os.getpid()}',
 		silent = False,
 	)

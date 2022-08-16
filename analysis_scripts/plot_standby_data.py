@@ -17,7 +17,7 @@ def do_IV_vs_when_plot(measured_data_df):
 				go.Scattergl(
 					x = measured_data_df.loc[device_name,'When'],
 					y = measured_data_df.loc[device_name,var_name],
-					mode = 'lines+markers',
+					mode = 'lines',
 					name = device_name,
 					legendgroup = device_name,
 					showlegend = row_idx == 0,
@@ -26,6 +26,8 @@ def do_IV_vs_when_plot(measured_data_df):
 						type = 'data',
 						array = measured_data_df.loc[device_name,f'{var_name} std'],
 						visible = True,
+						width = 1,
+						thickness = .8,
 					),
 				),
 				row = row_idx+1,
@@ -34,7 +36,7 @@ def do_IV_vs_when_plot(measured_data_df):
 	return IV_vs_when_plot
 
 Norbert = NamedTaskBureaucrat(
-	Path('/home/sengerm/measurements_data')/'20220815000000_monitoring_standby_conditions',
+	Path('/home/sengerm/measurements_data')/'20220816000000_Robocold_setup_test_run',
 	task_name = 'plot_standby_data',
 	_locals = locals(),
 )

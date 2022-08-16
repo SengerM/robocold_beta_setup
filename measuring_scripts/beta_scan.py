@@ -15,7 +15,6 @@ from progressreporting.TelegramProgressReporter import TelegramReporter # https:
 import my_telegram_bots
 import numpy
 PATH_TO_ANALYSIS_SCRIPTS = Path(__file__).resolve().parent.parent/'analysis_scripts'
-print(PATH_TO_ANALYSIS_SCRIPTS)
 import sys
 sys.path.append(str(PATH_TO_ANALYSIS_SCRIPTS))
 from plot_everything_from_beta_scan import plot_everything_from_beta_scan
@@ -327,13 +326,21 @@ if __name__=='__main__':
 	
 	# ------------------------------------------------------------------
 	
-	beta_scan_sweeping_bias_voltage(
-		path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'), 
-		measurement_name = input('Measurement name? ').replace(' ','_'),
-		name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
-		slot_number = 7, 
-		n_triggers_per_voltage = 1111,
-		bias_voltages = [150,160,170,180,190,194],
-		silent = False, 
-		software_triggers = [lambda x,A=A: software_trigger(x, A) for A in [.01,.02,.03,.05,.1,.1]],
+	John = NamedTaskBureaucrat(
+		Path.home()/Path('measurements_data')/Path('20220816000000_Robocold_setup_test_run'),
+		task_name = 'beta_scans',
+		_locals = locals(),
 	)
+	
+	with John.do_your_magic(clean_default_output_directory = False):
+		John.path_to_submeasurements_directory.mkdir(exist_ok=True)
+		beta_scan_sweeping_bias_voltage(
+			path_to_directory_in_which_to_store_data = John.path_to_submeasurements_directory,
+			measurement_name = input('Measurement name? ').replace(' ','_'),
+			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
+			slot_number = 7,
+			n_triggers_per_voltage = 1111,
+			bias_voltages = [150,160,170,180,190,194],
+			silent = False,
+			software_triggers = [lambda x,A=A: software_trigger(x, A) for A in [.01,.02,.03,.05,.1,.1]],
+		)
