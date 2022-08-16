@@ -14,7 +14,7 @@ def do_IV_vs_when_plot(measured_data_df):
 		for row_idx,var_name in enumerate(['Bias voltage (V)','Bias current (A)']):
 			IV_vs_when_plot.update_yaxes(title_text=var_name, row=row_idx+1, col=1)
 			IV_vs_when_plot.add_trace(
-				go.Scatter(
+				go.Scattergl(
 					x = measured_data_df.loc[device_name,'When'],
 					y = measured_data_df.loc[device_name,var_name],
 					mode = 'lines+markers',
@@ -42,8 +42,6 @@ Norbert = NamedTaskBureaucrat(
 with Norbert.do_your_magic():
 	measured_data_df = load_whole_dataframe(Norbert.path_to_output_directory_of_task_named('monitor_standby_conditions')/'measured_data.sqlite')
 	measured_data_df['Bias voltage (V)'] *= -1
-	
-	print(measured_data_df)
 	
 	fig = do_IV_vs_when_plot(measured_data_df)
 	fig.write_html(
