@@ -9,6 +9,7 @@ from scipy.stats import median_abs_deviation
 from scipy.optimize import curve_fit
 from landaupy import langauss, landau # https://github.com/SengerM/landaupy
 from grafica.plotly_utils.utils import scatter_histogram # https://github.com/SengerM/grafica
+import warnings
 
 def hex_to_rgba(h, alpha):
     return tuple([int(h.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)] + [alpha])
@@ -65,7 +66,6 @@ def binned_fit_langauss(samples, bins='auto', nan_policy='drop'):
 
 def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, column_name, line_color):
 	samples = parsed_from_waveforms_df.loc[pandas.IndexSlice[:, signal_name], column_name]
-	popt, _, hist, bin_centers = binned_fit_langauss(samples)
 	
 	fig.add_trace(
 		scatter_histogram(
@@ -77,25 +77,44 @@ def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, 
 			legendgroup = signal_name,
 		)
 	)
-	x_axis = np.linspace(min(bin_centers),max(bin_centers),999)
-	fig.add_trace(
-		go.Scatter(
-			x = x_axis,
-			y = langauss.pdf(x_axis, *popt)*len(samples)*np.diff(bin_centers)[0],
-			name = f'Langauss fit {signal_name}<br>x<sub>MPV</sub>={popt[0]:.2e}<br>ξ={popt[1]:.2e}<br>σ={popt[2]:.2e}',
-			line = dict(color = line_color, dash='dash'),
-			legendgroup = signal_name,
+	
+	fit_successfull = False
+	try:
+		popt, _, hist, bin_centers = binned_fit_langauss(samples)
+		fit_successfull = True
+	except Exception as e:
+		warnings.warn(f'Cannot fit langauss to data, reason: {repr(e)}.')
+	if fit_successfull == True:
+		x_axis = np.linspace(min(bin_centers),max(bin_centers),999)
+		fig.add_trace(
+			go.Scatter(
+				x = x_axis,
+				y = langauss.pdf(x_axis, *popt)*len(samples)*np.diff(bin_centers)[0],
+				name = f'Langauss fit {signal_name}<br>x<sub>MPV</sub>={popt[0]:.2e}<br>ξ={popt[1]:.2e}<br>σ={popt[2]:.2e}',
+				line = dict(color = line_color, dash='dash'),
+				legendgroup = signal_name,
+			)
 		)
-	)
-	fig.add_trace(
-		go.Scatter(
-			x = x_axis,
-			y = landau.pdf(x_axis, popt[0], popt[1])*len(samples)*np.diff(bin_centers)[0],
-			name = f'Landau component {signal_name}',
-			line = dict(color = f'rgba{hex_to_rgba(line_color, .3)}', dash='dashdot'),
-			legendgroup = signal_name,
+		fig.add_trace(
+			go.Scatter(
+				x = x_axis,
+				y = landau.pdf(x_axis, popt[0], popt[1])*len(samples)*np.diff(bin_centers)[0],
+				name = f'Landau component {signal_name}',
+				line = dict(color = f'rgba{hex_to_rgba(line_color, .3)}', dash='dashdot'),
+				legendgroup = signal_name,
+			)
 		)
-	)
+	else:
+		signal_names = sorted(set(parsed_from_waveforms_df.index.get_level_values('signal_name')))
+		fig.add_annotation(
+			text = f'Could not fit Langauss to {signal_name}',
+			xref = "paper", 
+			yref = "paper",
+			x = 1,
+			y = 1-signal_names.index(signal_name)/len(signal_names),
+			showarrow = False,
+			align = 'right',
+		)
 
 def plot_everything_from_beta_scan(directory: Path):
 	John = NamedTaskBureaucrat(
@@ -129,59 +148,59 @@ def plot_everything_from_beta_scan(directory: Path):
 				include_plotlyjs = 'cdn',
 			)
 		
-		df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
-		path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
-		path_to_save_plots.mkdir()
-		for col in df.columns:
-			if col in {'signal_name','n_trigger'}:
-				continue
-			fig = px.histogram(
-				df,
-				title = f'{col} histogram<br><sup>Measurement: {John.measurement_name}</sup>',
-				x = col,
-				facet_row = 'signal_name',
-			)
-			fig.write_html(
-				str(path_to_save_plots/Path(f'{col} histogram.html')),
-				include_plotlyjs = 'cdn',
-			)
+		# ~ df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
+		# ~ path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
+		# ~ path_to_save_plots.mkdir()
+		# ~ for col in df.columns:
+			# ~ if col in {'signal_name','n_trigger'}:
+				# ~ continue
+			# ~ fig = px.histogram(
+				# ~ df,
+				# ~ title = f'{col} histogram<br><sup>Measurement: {John.measurement_name}</sup>',
+				# ~ x = col,
+				# ~ facet_row = 'signal_name',
+			# ~ )
+			# ~ fig.write_html(
+				# ~ str(path_to_save_plots/Path(f'{col} histogram.html')),
+				# ~ include_plotlyjs = 'cdn',
+			# ~ )
 			
-			fig = px.ecdf(
-				df,
-				title = f'{col} ECDF<br><sup>Measurement: {John.measurement_name}</sup>',
-				x = col,
-				facet_row = 'signal_name',
-			)
-			fig.write_html(
-				str(path_to_save_plots/Path(f'{col} ecdf.html')),
-				include_plotlyjs = 'cdn',
-			)
+			# ~ fig = px.ecdf(
+				# ~ df,
+				# ~ title = f'{col} ECDF<br><sup>Measurement: {John.measurement_name}</sup>',
+				# ~ x = col,
+				# ~ facet_row = 'signal_name',
+			# ~ )
+			# ~ fig.write_html(
+				# ~ str(path_to_save_plots/Path(f'{col} ecdf.html')),
+				# ~ include_plotlyjs = 'cdn',
+			# ~ )
 			
-			columns_for_scatter_matrix_plot = set(df.columns) 
-			columns_for_scatter_matrix_plot -= {'n_trigger','signal_name'} 
-			columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
-			columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
-			fig = px.scatter_matrix(
-				df,
-				dimensions = sorted(columns_for_scatter_matrix_plot),
-				title = f'Scatter matrix plot<br><sup>Measurement: {John.measurement_name}</sup>',
-				color = 'signal_name',
-				hover_data = ['n_trigger'],
-			)
-			fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
-			for k in range(len(fig.data)):
-				fig.data[k].update(
-					selected = dict(
-						marker = dict(
-							opacity = 1,
-							color = 'black',
-						)
-					),
-				)
-			fig.write_html(
-				str(path_to_save_plots/Path('scatter matrix plot.html')),
-				include_plotlyjs = 'cdn',
-			)
+			# ~ columns_for_scatter_matrix_plot = set(df.columns) 
+			# ~ columns_for_scatter_matrix_plot -= {'n_trigger','signal_name'} 
+			# ~ columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
+			# ~ columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
+			# ~ fig = px.scatter_matrix(
+				# ~ df,
+				# ~ dimensions = sorted(columns_for_scatter_matrix_plot),
+				# ~ title = f'Scatter matrix plot<br><sup>Measurement: {John.measurement_name}</sup>',
+				# ~ color = 'signal_name',
+				# ~ hover_data = ['n_trigger'],
+			# ~ )
+			# ~ fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
+			# ~ for k in range(len(fig.data)):
+				# ~ fig.data[k].update(
+					# ~ selected = dict(
+						# ~ marker = dict(
+							# ~ opacity = 1,
+							# ~ color = 'black',
+						# ~ )
+					# ~ ),
+				# ~ )
+			# ~ fig.write_html(
+				# ~ str(path_to_save_plots/Path('scatter matrix plot.html')),
+				# ~ include_plotlyjs = 'cdn',
+			# ~ )
 		
 		path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
 		path_to_save_plots.mkdir(exist_ok=True)
