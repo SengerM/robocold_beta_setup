@@ -148,59 +148,59 @@ def plot_everything_from_beta_scan(directory: Path):
 				include_plotlyjs = 'cdn',
 			)
 		
-		# ~ df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
-		# ~ path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
-		# ~ path_to_save_plots.mkdir()
-		# ~ for col in df.columns:
-			# ~ if col in {'signal_name','n_trigger'}:
-				# ~ continue
-			# ~ fig = px.histogram(
-				# ~ df,
-				# ~ title = f'{col} histogram<br><sup>Measurement: {John.measurement_name}</sup>',
-				# ~ x = col,
-				# ~ facet_row = 'signal_name',
-			# ~ )
-			# ~ fig.write_html(
-				# ~ str(path_to_save_plots/Path(f'{col} histogram.html')),
-				# ~ include_plotlyjs = 'cdn',
-			# ~ )
+		df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
+		path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
+		path_to_save_plots.mkdir()
+		for col in df.columns:
+			if col in {'signal_name','n_trigger'}:
+				continue
+			fig = px.histogram(
+				df,
+				title = f'{col} histogram<br><sup>Measurement: {John.measurement_name}</sup>',
+				x = col,
+				facet_row = 'signal_name',
+			)
+			fig.write_html(
+				str(path_to_save_plots/Path(f'{col} histogram.html')),
+				include_plotlyjs = 'cdn',
+			)
 			
-			# ~ fig = px.ecdf(
-				# ~ df,
-				# ~ title = f'{col} ECDF<br><sup>Measurement: {John.measurement_name}</sup>',
-				# ~ x = col,
-				# ~ facet_row = 'signal_name',
-			# ~ )
-			# ~ fig.write_html(
-				# ~ str(path_to_save_plots/Path(f'{col} ecdf.html')),
-				# ~ include_plotlyjs = 'cdn',
-			# ~ )
+			fig = px.ecdf(
+				df,
+				title = f'{col} ECDF<br><sup>Measurement: {John.measurement_name}</sup>',
+				x = col,
+				facet_row = 'signal_name',
+			)
+			fig.write_html(
+				str(path_to_save_plots/Path(f'{col} ecdf.html')),
+				include_plotlyjs = 'cdn',
+			)
 			
-			# ~ columns_for_scatter_matrix_plot = set(df.columns) 
-			# ~ columns_for_scatter_matrix_plot -= {'n_trigger','signal_name'} 
-			# ~ columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
-			# ~ columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
-			# ~ fig = px.scatter_matrix(
-				# ~ df,
-				# ~ dimensions = sorted(columns_for_scatter_matrix_plot),
-				# ~ title = f'Scatter matrix plot<br><sup>Measurement: {John.measurement_name}</sup>',
-				# ~ color = 'signal_name',
-				# ~ hover_data = ['n_trigger'],
-			# ~ )
-			# ~ fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
-			# ~ for k in range(len(fig.data)):
-				# ~ fig.data[k].update(
-					# ~ selected = dict(
-						# ~ marker = dict(
-							# ~ opacity = 1,
-							# ~ color = 'black',
-						# ~ )
-					# ~ ),
-				# ~ )
-			# ~ fig.write_html(
-				# ~ str(path_to_save_plots/Path('scatter matrix plot.html')),
-				# ~ include_plotlyjs = 'cdn',
-			# ~ )
+			columns_for_scatter_matrix_plot = set(df.columns) 
+			columns_for_scatter_matrix_plot -= {'n_trigger','signal_name'} 
+			columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
+			columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
+			fig = px.scatter_matrix(
+				df,
+				dimensions = sorted(columns_for_scatter_matrix_plot),
+				title = f'Scatter matrix plot<br><sup>Measurement: {John.measurement_name}</sup>',
+				color = 'signal_name',
+				hover_data = ['n_trigger'],
+			)
+			fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
+			for k in range(len(fig.data)):
+				fig.data[k].update(
+					selected = dict(
+						marker = dict(
+							opacity = 1,
+							color = 'black',
+						)
+					),
+				)
+			fig.write_html(
+				str(path_to_save_plots/Path('scatter matrix plot.html')),
+				include_plotlyjs = 'cdn',
+			)
 		
 		path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
 		path_to_save_plots.mkdir(exist_ok=True)
