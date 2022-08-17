@@ -11,7 +11,7 @@ from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dat
 import threading
 import warnings
 
-def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_name:str, voltages:list, slot_number:int, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent=False)->Path:
+def measure_iv_curve(path_to_directory_in_which_to_place_the_new_measurement:Path, measurement_name:str, voltages:list, slot_number:int, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent=False)->Path:
 	"""Measure an IV curve.
 	Parameters
 	----------
@@ -39,7 +39,7 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 	"""
 	
 	John = NamedTaskBureaucrat(
-		path_to_directory_in_which_to_store_data/Path(measurement_name),
+		path_to_directory_in_which_to_place_the_new_measurement/Path(measurement_name),
 		task_name = 'measure_iv_curve',
 		new_measurement = True,
 		_locals = locals(),
@@ -141,7 +141,7 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 
 	return John.path_to_measurement_base_directory
 
-def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Path, measurement_name:str, voltages:dict, current_compliances:dict, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, silent:bool=False)->Path:
+def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_place_the_new_measurement:Path, measurement_name:str, voltages:dict, current_compliances:dict, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, silent:bool=False)->Path:
 	"""Measure the IV curve of multiple slots.
 	
 	Parameters
@@ -182,7 +182,7 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 			self.silent = silent
 		def run(self):
 			measure_iv_curve(
-				path_to_directory_in_which_to_store_data = self.directory_to_store_data,
+				path_to_directory_in_which_to_place_the_new_measurement = self.directory_to_store_data,
 				measurement_name = f'IV_curve_{the_setup.get_name_of_device_in_slot_number(self.slot_number)}',
 				name_to_access_to_the_setup = name_to_access_to_the_setup,
 				voltages = self.voltages_to_measure, 
@@ -193,7 +193,7 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 			)
 	
 	Richard = NamedTaskBureaucrat(
-		path_to_directory_in_which_to_store_data/Path(measurement_name),
+		path_to_directory_in_which_to_place_the_new_measurement/Path(measurement_name),
 		task_name = 'measure_iv_curve_multiple_slots',
 		new_measurement = True,
 		_locals = locals(),
@@ -241,16 +241,40 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 		
 		if not silent:
 			print(f'Finished measuring all IV curves.')
-		
-		# Do a plot...
+	
+	return Richard.path_to_measurement_base_directory
+
+def plot_IV_curves_all_together(path_to_directory_in_which_to_find_the_measurement:Path, measurement_name:str):
+	"""Do a plot of the IV curves measured previously all together.
+	
+	Parameters
+	----------
+	path_to_directory_in_which_to_store_data: Path
+		Path to the directory where to find the measurement.
+	measurement_name: str
+		Name of the measurement to plot.
+	"""
+	Richard = NamedTaskBureaucrat(
+		path_to_directory_in_which_to_find_the_measurement/measurement_name,
+		task_name = 'plot_IV_curves_all_together',
+		_locals = locals(),
+	)
+	
+	Richard.check_required_tasks_were_run_before('measure_iv_curve_multiple_slots')
+	
+	with Richard.do_your_magic():
 		measured_data_list = []
-		for path_to_submeasurement in Richard.path_to_submeasurements_directory.iterdir():
-			Felipe = SmarterBureaucrat(
+		for submeasurement_name, path_to_submeasurement in Richard.find_submeasurements_of_task('measure_iv_curve_multiple_slots').items():
+			Felipe = NamedTaskBureaucrat(
 				path_to_submeasurement,
+				task_name = 'dummy',
 				_locals = locals(),
 			)
+			Felipe.check_required_tasks_were_run_before('measure_iv_curve')
 			measured_data_list.append(
-				load_whole_dataframe(Felipe.path_to_output_directory_of_script_named('iv_curve.py')/Path('measured_data.sqlite')).reset_index(),
+				load_whole_dataframe(
+					Felipe.path_to_output_directory_of_task_named('measure_iv_curve')/Path('measured_data.sqlite')
+				).reset_index(),
 			)
 		measured_data_df = pandas.concat(measured_data_list, ignore_index=True)
 		measured_data_df['Bias voltage (V)'] *= -1
@@ -270,19 +294,24 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 			markers = True,
 			title = f'IV curves<br><sup>Measurement: {Richard.measurement_name}</sup>',
 		)
+		fig.update_traces(
+			error_y = dict(
+				width = 1,
+				thickness = .8,
+			)
+		)
 		fig.write_html(
-			str(Richard.path_to_default_output_directory/Path('iv_curves_measured.html')),
+			str(Richard.path_to_default_output_directory/Path('iv_curves.html')),
 			include_plotlyjs = 'cdn',
 		)
-	return Richard.path_to_measurement_base_directory
 
 if __name__=='__main__':
 	import numpy
 	import os
 	from configuration_files.current_run import CURRENT_RUN_NAME
 	
-	SLOTS = [1,2,3]
-	VOLTAGE_VALUES = list(numpy.linspace(0,777,33))
+	SLOTS = [1,2,3,4,5,6,7]
+	VOLTAGE_VALUES = list(numpy.linspace(0,777,555))
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}
@@ -296,12 +325,16 @@ if __name__=='__main__':
 	
 	with John.do_your_magic(clean_default_output_directory = False):
 		John.path_to_submeasurements_directory.mkdir(exist_ok=True)
-		measure_iv_curve_multiple_slots(
-			path_to_directory_in_which_to_store_data = John.path_to_submeasurements_directory,
+		p = measure_iv_curve_multiple_slots(
+			path_to_directory_in_which_to_place_the_new_measurement = John.path_to_submeasurements_directory,
 			measurement_name = input('Measurement name? ').replace(' ','_'),
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 			voltages = VOLTAGES_FOR_EACH_SLOT,
 			current_compliances = CURRENT_COMPLIANCES,
 			n_measurements_per_voltage = 11,
 			silent = False,
+		)
+		plot_IV_curves_all_together(
+			path_to_directory_in_which_to_find_the_measurement = p.parent,
+			measurement_name = p.parts[-1],
 		)
