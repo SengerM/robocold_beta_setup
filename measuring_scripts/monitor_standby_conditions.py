@@ -141,10 +141,11 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 
 if __name__=='__main__':
 	import os
+	from configuration_files.current_run import CURRENT_RUN_NAME
 	
 	script_core(
 		path_to_directory_in_which_to_store_data = Path('/home/sengerm/measurements_data'),
-		measurement_name = '20220816000000_Robocold_setup_test_run',
+		measurement_name = CURRENT_RUN_NAME,
 		name_to_access_to_the_setup = f'monitoring_standby_conditions_{os.getpid()}',
 		silent = False,
 	)

@@ -314,6 +314,7 @@ def beta_scan_sweeping_bias_voltage(path_to_directory_in_which_to_store_data:Pat
 				
 if __name__=='__main__':
 	import os
+	from configuration_files.current_run import CURRENT_RUN_NAME
 	
 	def software_trigger(signals_dict, minimum_DUT_amplitude:float):
 		DUT_signal = signals_dict['DUT']
@@ -327,7 +328,7 @@ if __name__=='__main__':
 	# ------------------------------------------------------------------
 	
 	John = NamedTaskBureaucrat(
-		Path.home()/Path('measurements_data')/Path('20220816000000_Robocold_setup_test_run'),
+		Path.home()/Path('measurements_data')/CURRENT_RUN_NAME,
 		task_name = 'beta_scans',
 		_locals = locals(),
 	)
