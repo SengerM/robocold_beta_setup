@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import SmarterBureaucrat # https://github.com/SengerM/bureaucrat
+from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
 from pathlib import Path
 import pandas
 import datetime
@@ -38,8 +38,9 @@ def measure_iv_curve(path_to_directory_in_which_to_store_data:Path, measurement_
 		A path to the directory where the measurement's data was stored.
 	"""
 	
-	John = SmarterBureaucrat(
+	John = NamedTaskBureaucrat(
 		path_to_directory_in_which_to_store_data/Path(measurement_name),
+		task_name = 'measure_iv_curve',
 		new_measurement = True,
 		_locals = locals(),
 	)
@@ -191,8 +192,9 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 				silent = self.silent,
 			)
 	
-	Richard = SmarterBureaucrat(
+	Richard = NamedTaskBureaucrat(
 		path_to_directory_in_which_to_store_data/Path(measurement_name),
+		task_name = 'measure_iv_curve_multiple_slots',
 		new_measurement = True,
 		_locals = locals(),
 	)
@@ -222,6 +224,8 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 		with open(Richard.path_to_default_output_directory/Path('setup_description.txt'), 'w') as ofile:
 			print(the_setup.get_description(), file=ofile)
 		
+		if not silent:
+			print(f'Waiting to acquire the control of Robocold...')
 		with the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
 			if not silent:
 				print(f'Moving the beta source outside all detectors...')
@@ -275,22 +279,29 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_store_data:Pat
 if __name__=='__main__':
 	import numpy
 	import os
+	from configuration_files.current_run import CURRENT_RUN_NAME
 	
-	SLOTS = [1,2,3,4,5,6,7]
+	SLOTS = [1,2,3]
 	VOLTAGE_VALUES = list(numpy.linspace(0,777,33))
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}
 	NAME_TO_ACCESS_TO_THE_SETUP = f'IV curves measurement script PID: {os.getpid()}'
 	
-	the_setup = connect_me_with_the_setup()
-	
-	measure_iv_curve_multiple_slots(
-		path_to_directory_in_which_to_store_data = Path.home()/Path('measurements_data'),
-		measurement_name = input('Measurement name? ').replace(' ','_'),
-		name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
-		voltages = VOLTAGES_FOR_EACH_SLOT,
-		current_compliances = CURRENT_COMPLIANCES,
-		n_measurements_per_voltage = 11,
-		silent = False,
+	John = NamedTaskBureaucrat(
+		Path.home()/Path('measurements_data')/CURRENT_RUN_NAME,
+		task_name = 'iv_curves',
+		_locals = locals(),
 	)
+	
+	with John.do_your_magic(clean_default_output_directory = False):
+		John.path_to_submeasurements_directory.mkdir(exist_ok=True)
+		measure_iv_curve_multiple_slots(
+			path_to_directory_in_which_to_store_data = John.path_to_submeasurements_directory,
+			measurement_name = input('Measurement name? ').replace(' ','_'),
+			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
+			voltages = VOLTAGES_FOR_EACH_SLOT,
+			current_compliances = CURRENT_COMPLIANCES,
+			n_measurements_per_voltage = 11,
+			silent = False,
+		)
