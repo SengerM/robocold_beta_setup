@@ -71,7 +71,7 @@ def clean_beta_scan(path_to_measurement_base_directory:Path, path_to_cuts_file:P
 		_locals = locals(),
 	)
 	
-	John.check_required_scripts_were_run_before('beta_scan.py')
+	John.check_required_tasks_were_run_before('beta_scan')
 	
 	if path_to_cuts_file is None:
 		path_to_cuts_file = John.path_to_measurement_base_directory/Path('cuts.csv')
