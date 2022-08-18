@@ -116,9 +116,9 @@ def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, 
 			align = 'right',
 		)
 
-def plot_everything_from_beta_scan(directory: Path):
+def plot_everything_from_beta_scan(path_to_measurement: Path):
 	John = NamedTaskBureaucrat(
-		directory,
+		path_to_measurement,
 		task_name = 'plot_everything_from_beta_scan',
 		_locals = locals(),
 	)
@@ -236,6 +236,18 @@ if __name__ == '__main__':
 		dest = 'directory',
 		type = str,
 	)
-
+	
 	args = parser.parse_args()
-	plot_everything_from_beta_scan(Path(args.directory))
+	
+	Enrique = NamedTaskBureaucrat(
+		Path(args.directory),
+		task_name = 'deleteme',
+		_locals = locals(),
+	)
+	
+	if Enrique.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage', raise_error=False):
+		for measurement_name, path_to_measurement in Enrique.find_submeasurements_of_task('beta_scan_sweeping_bias_voltage').items():
+			print(f'Processing {measurement_name}...')
+			plot_everything_from_beta_scan(path_to_measurement)
+	else:
+		plot_everything_from_beta_scan(Path(args.directory))
