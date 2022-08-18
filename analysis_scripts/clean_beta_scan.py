@@ -85,6 +85,23 @@ def clean_beta_scan(path_to_measurement_base_directory:Path, path_to_cuts_file:P
 		filtered_triggers_df = apply_cuts(data_df, cuts_df)
 		filtered_triggers_df.reset_index().to_feather(John.path_to_default_output_directory/Path('result.fd'))
 
+def clean_beta_scan_submeasurements_using_the_same_cuts_for_all(path_to_measurement_base_directory:Path, path_to_cuts_file:Path=None):
+	"""Clean all sub- beta scans using the same cuts."""
+	Eriberto = NamedTaskBureaucrat(
+		path_to_measurement_base_directory,
+		task_name = 'clean_beta_scan_submeasurements_using_the_same_cuts_for_all',
+		_locals = locals(),
+	)
+	Eriberto.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage')
+	
+	if path_to_cuts_file is None: # Try to locate it within the measurement's base directory.
+		path_to_cuts_file = Eriberto.path_to_measurement_base_directory/'cuts.csv'
+	if not path_to_cuts_file.is_file():
+		raise FileNotFoundError(f'Cannot find file with the cuts in {path_to_cuts_file}.')
+	for submeasurement_name, path_to_submeasurement in Eriberto.find_submeasurements_of_task('beta_scan_sweeping_bias_voltage').items():
+		clean_beta_scan(path_to_submeasurement, path_to_cuts_file)
+		plot_beta_scan_after_cleaning(path_to_submeasurement)
+
 def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path):
 	COLOR_DISCRETE_MAP = {
 		True: '#ff5c5c',
@@ -185,6 +202,21 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path):
 				include_plotlyjs = 'cdn',
 			)
 
+def script_core(path_to_measurement_base_directory:Path):
+	John = NamedTaskBureaucrat(
+		path_to_measurement_base_directory,
+		task_name = 'deleteme_dummy',
+		_locals = locals(),
+	)
+	
+	if John.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage', raise_error=False):
+		clean_beta_scan_submeasurements_using_the_same_cuts_for_all(path_to_measurement_base_directory)
+	elif John.check_required_tasks_were_run_before('beta_scan', raise_error=False):
+		clean_beta_scan(path_to_measurement_base_directory)
+		plot_beta_scan_after_cleaning(path_to_measurement_base_directory)
+	else:
+		raise RuntimeError(f'Dont know how to process measurement `{repr(John.measurement_name)}` located in {John.path_to_measurement_base_directory}.')
+
 if __name__ == '__main__':
 	import argparse
 
@@ -198,5 +230,4 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	clean_beta_scan(Path(args.directory))
-	plot_beta_scan_after_cleaning(Path(args.directory))
+	script_core(Path(args.directory))
