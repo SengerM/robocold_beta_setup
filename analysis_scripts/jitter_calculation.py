@@ -144,7 +144,7 @@ def sigma_from_gaussian_fit(x, nan_policy='drop')->float:
 	_, sigma, _ = fit_gaussian_to_samples(samples=x, bins='auto', nan_policy=nan_policy)
 	return sigma
 
-def plot_cfd(jitter_df):
+def plot_cfd(jitter_df, constant_fraction_discriminator_thresholds_to_use_for_the_jitter):
 	"""Plot the color map of the constant fraction discriminator thresholds
 	and the resulting jitter.
 	
@@ -202,13 +202,12 @@ def plot_cfd(jitter_df):
 				name = '',
 			),
 		)
-		optimum_constant_fraction_discriminator_thresholds = df[col].idxmin()
 		fig.add_trace(
 			go.Scatter(
-				x = [optimum_constant_fraction_discriminator_thresholds[0]],
-				y = [optimum_constant_fraction_discriminator_thresholds[1]],
+				x = [constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]],
+				y = [constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]],
 				mode = 'markers',
-				hovertext = [f'<b>Minimum</b><br>{pivot_table_df.index.name}: {optimum_constant_fraction_discriminator_thresholds[0]:.0f} %<br>{pivot_table_df.columns.name}: {optimum_constant_fraction_discriminator_thresholds[1]:.0f} %<br>{jitter_column_name} {col}: {df.loc[optimum_constant_fraction_discriminator_thresholds,col]*1e12:.2f} ps'],
+				hovertext = [f'<b>Minimum</b><br>{pivot_table_df.index.name}: {constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]:.0f} %<br>{pivot_table_df.columns.name}: {constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]:.0f} %<br>{jitter_column_name} {col}: {df.loc[constant_fraction_discriminator_thresholds_to_use_for_the_jitter,col]*1e12:.2f} ps'],
 				hoverinfo = 'text',
 				marker = dict(
 					color = '#61ff5c',
@@ -227,14 +226,36 @@ def plot_cfd(jitter_df):
 		figs[col] = fig
 	return figs
 
-def jitter_calculation_beta_scan_single_voltage(path_to_measurement_base_directory:Path, force:bool=False):
+def jitter_calculation_beta_scan(path_to_measurement_base_directory:Path, CFD_thresholds='best', force:bool=False):
+	"""Calculates the jitter from a beta scan between two devices.
+	
+	Arguments
+	---------
+	path_to_measurement_base_directory: Path
+		Path to the measurement that contains the beta scan.
+	CFD_thresholds: str or dict, default `'best'`
+		If `'best'`, then the CFD thresholds are chosen such that the
+		jitter is minimized. If a dictionary, it must be of the form:
+		`{signal_name_1: float, signal_name_2: float}` where each `signal_name`
+		is a string with the name of the signal and each `float` is a 
+		number between 0 and 100 specifying the CFD threshold height in 
+		percentage, e.g. `{'DUT': 20, 'reference_trigger': 50}`.
+	force: bool, default `True`
+		If `True` the calculation is done, no matter if it was done before
+		or not. If `False` the calculation will be done only if there is
+		no previous calculation of it.
+	"""
+	
 	Norberto = NamedTaskBureaucrat(
 		path_to_measurement_base_directory,
-		task_name = 'jitter_calculation_beta_scan_single_voltage',
+		task_name = 'jitter_calculation_beta_scan',
 		_locals = locals(),
 	)
 	
-	Norberto.check_required_scripts_were_run_before('beta_scan.py')
+	Norberto.check_required_tasks_were_run_before('beta_scan')
+	
+	if not (CFD_thresholds != 'best' or not isinstance(CFD_thresholds, dict)):
+		raise ValueError('Wrong value for `CFD_thresholds`, please read the documentation of this function.')
 	
 	if force == False and Norberto.task_was_applied_without_errors(): # If this was already done, don't do it again...
 		return
@@ -276,11 +297,18 @@ def jitter_calculation_beta_scan_single_voltage(path_to_measurement_base_directo
 			Δt_df.index = Δt_df.index.droplevel('n_trigger')
 			jitter_df = Δt_df.groupby(level=Δt_df.index.names).agg(func=(kMAD, np.std, sigma_from_gaussian_fit))
 			
-			optimum_constant_fraction_discriminator_thresholds = jitter_df.idxmin()
+			if CFD_thresholds == 'best':
+				optimum_constant_fraction_discriminator_thresholds = jitter_df.idxmin()
+				optimum_constant_fraction_discriminator_thresholds = optimum_constant_fraction_discriminator_thresholds[('Δt (s)',STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION)]
+				constant_fraction_discriminator_thresholds_to_use_for_the_jitter = optimum_constant_fraction_discriminator_thresholds
+			else: # It is a dictionary specifying the threshold for each signal.
+				set_of_signals_in_this_measurement = set(data_df.index.get_level_values('signal_name'))
+				if set_of_signals_in_this_measurement != set(CFD_thresholds.keys()):
+					raise ValueError(f'`CFD_thresholds` specifies signal names that are not found in the data. According to the data the signal names are {set_of_signals_in_this_measurement} and `CFD_thresholds` specifies signal names {set(CFD_thresholds.keys())}.')
+				if any([not 0 <=CFD_thresholds[s] <= 100 for s in set_of_signals_in_this_measurement]):
+					raise ValueError(f'`CFD_thresholds` contains values outside the range from 0 to 100, which is wrong. Received `CFD_thresholds = {CFD_thresholds}`.')
+				constant_fraction_discriminator_thresholds_to_use_for_the_jitter = tuple([CFD_thresholds[k_name[2:-4]] for k_name in jitter_df.index.names]) # The `k_name` is e.g. "'k_DUT (%)'" and here we want just `"DUT"`.
 			
-			optimum_constant_fraction_discriminator_thresholds = optimum_constant_fraction_discriminator_thresholds[('Δt (s)',STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION)]
-			
-			constant_fraction_discriminator_thresholds_to_use_for_the_jitter = optimum_constant_fraction_discriminator_thresholds
 			jitter_final_number = jitter_df.loc[constant_fraction_discriminator_thresholds_to_use_for_the_jitter,('Δt (s)',STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION)]
 			
 			jitter_results.append(
@@ -295,7 +323,7 @@ def jitter_calculation_beta_scan_single_voltage(path_to_measurement_base_directo
 			if bootstrapped_iteration == True:
 				continue
 			else: # Do some plots
-				figs = plot_cfd(jitter_df)
+				figs = plot_cfd(jitter_df, constant_fraction_discriminator_thresholds_to_use_for_the_jitter)
 				for key,fig in figs.items():
 					fig.update_layout(title=f'CFD jitter measured using {key} from Δt<br><sup>Measurement: {Norberto.measurement_name}</sup>')
 				figs[STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION].write_html(str(Norberto.path_to_default_output_directory/f'CFD jitter using {key}.html'), include_plotlyjs='cdn')
@@ -381,25 +409,26 @@ def jitter_calculation_beta_scan_single_voltage(path_to_measurement_base_directo
 			include_plotlyjs = 'cdn',
 		)
 
-def jitter_calculation_beta_scan_sweeping_voltage(path_to_measurement_base_directory:Path, force_calculation_on_submeasurements:bool=False):
+def jitter_calculation_beta_scan_sweeping_voltage(path_to_measurement_base_directory:Path, CFD_thresholds, force_calculation_on_submeasurements:bool=False):
 	Norberto = NamedTaskBureaucrat(
 		path_to_measurement_base_directory,
 		task_name = 'jitter_calculation_beta_scan_sweeping_voltage',
 		_locals = locals(),
 	)
 	
-	Norberto.check_required_tasks_were_run_before('beta_scan')
+	Norberto.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage')
 	
 	with Norberto.do_your_magic():
 		jitters = []
-		for submeasurement_name, path_to_submeasurement in Norberto.find_submeasurements_of_task('beta_scan').items():
-			jitter_calculation_beta_scan_single_voltage(
-				path_to_measurement_base_directory = path_to_submeasurement, 
+		for submeasurement_name, path_to_submeasurement in Norberto.find_submeasurements_of_task('beta_scan_sweeping_bias_voltage').items():
+			jitter_calculation_beta_scan(
+				path_to_measurement_base_directory = path_to_submeasurement,
+				CFD_thresholds = CFD_thresholds,
 				force = force_calculation_on_submeasurements,
 			)
 			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='no_task', _locals=locals())
 			submeasurement_jitter = pandas.read_csv(
-				Raul.path_to_output_directory_of_task_named('jitter_calculation_beta_scan_single_voltage')/'jitter.csv',
+				Raul.path_to_output_directory_of_task_named('jitter_calculation_beta_scan')/'jitter.csv',
 				names = ['variable_name','value'],
 			)
 			submeasurement_jitter.set_index('variable_name', inplace=True)
@@ -425,20 +454,22 @@ def jitter_calculation_beta_scan_sweeping_voltage(path_to_measurement_base_direc
 			include_plotlyjs = 'cdn',
 		)
 
-def script_core(path_to_measurement_base_directory:Path, force:bool=False):
+def script_core(path_to_measurement_base_directory:Path, CFD_thresholds, force:bool=False):
 	Nestor = NamedTaskBureaucrat(
 		path_to_measurement_base_directory,
-		task_name = 'jitter_calculation_script_core',
+		task_name = 'deleteme',
 		_locals = locals(),
 	)
 	if Nestor.task_was_applied_without_errors('beta_scan_sweeping_bias_voltage'):
 		jitter_calculation_beta_scan_sweeping_voltage(
 			path_to_measurement_base_directory = path_to_measurement_base_directory,
+			CFD_thresholds = CFD_thresholds,
 			force_calculation_on_submeasurements = force,
 		)
 	elif Nestor.task_was_applied_without_errors('beta_scan'):
-		jitter_calculation_beta_scan_single_voltage(
+		jitter_calculation_beta_scan(
 			path_to_measurement_base_directory = path_to_measurement_base_directory,
+			CFD_thresholds = CFD_thresholds,
 			force = force,
 		)
 	else:
@@ -466,5 +497,6 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	script_core(
 		Path(args.directory), 
+		CFD_thresholds = {'DUT': 20, 'reference_trigger': 20},
 		force = args.force,
 	)
