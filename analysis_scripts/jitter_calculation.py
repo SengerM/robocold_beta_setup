@@ -433,7 +433,7 @@ def jitter_calculation_beta_scan_sweeping_voltage(path_to_measurement_base_direc
 			)
 			submeasurement_jitter.set_index('variable_name', inplace=True)
 			submeasurement_jitter = submeasurement_jitter['value']
-			submeasurement_jitter['submeasurement_name'] = submeasurement_name
+			submeasurement_jitter['measurement_name'] = submeasurement_name
 			submeasurement_jitter['Bias voltage (V)'] = float(submeasurement_name.split('_')[-1].replace('V',''))
 			jitters.append(submeasurement_jitter)
 		
