@@ -116,12 +116,12 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path):
 	
 	John.check_required_tasks_were_run_before(['beta_scan','clean_beta_scan'])
 	
-	parsed_from_waveforms_df = load_whole_dataframe(John.path_to_output_directory_of_script_named('beta_scan.py')/Path('parsed_from_waveforms.sqlite'))
-	clean_triggers_df = pandas.read_feather(John.path_to_output_directory_of_script_named('clean_beta_scan.py')/Path('result.fd')).set_index('n_trigger')
-	
 	with John.do_your_magic():
-		df = parsed_from_waveforms_df.merge(right=clean_triggers_df, left_index=True, right_index=True)
-		df = df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
+		df = load_whole_dataframe(John.path_to_output_directory_of_script_named('beta_scan.py')/Path('parsed_from_waveforms.sqlite'))
+		
+		df = tag_is_background_according_to_the_result_of_clean_beta_scan(John, df)
+		df = df.reset_index().sort_values('signal_name')
+		
 		path_to_save_plots = John.path_to_default_output_directory/'distributions'
 		path_to_save_plots.mkdir(exist_ok = True)
 		for col in df.columns:
@@ -189,10 +189,10 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path):
 				yaxis_title = 'count',
 			)
 			colors = iter(px.colors.qualitative.Plotly)
-			for signal_name in sorted(set(parsed_from_waveforms_df.index.get_level_values('signal_name'))):
+			for signal_name in sorted(set(df['signal_name'])):
 				draw_histogram_and_langauss_fit(
 					fig = fig,
-					parsed_from_waveforms_df = parsed_from_waveforms_df.merge(right=clean_triggers_df, left_index=True, right_index=True).query('is_background==False'),
+					parsed_from_waveforms_df = df.query('is_background==False').set_index(['n_waveform','signal_name']),
 					signal_name = signal_name,
 					column_name = col,
 					line_color = next(colors),
@@ -216,6 +216,45 @@ def script_core(path_to_measurement_base_directory:Path):
 		plot_beta_scan_after_cleaning(path_to_measurement_base_directory)
 	else:
 		raise RuntimeError(f'Dont know how to process measurement `{repr(John.measurement_name)}` located in {John.path_to_measurement_base_directory}.')
+
+def tag_is_background_according_to_the_result_of_clean_beta_scan(Ernesto:NamedTaskBureaucrat, df:pandas.DataFrame)->pandas.DataFrame:
+	"""If there was a "beta scan cleaning" performed on the measurement
+	being managed by `Ernesto`, it will be used to tag each row in `df`.
+	Note that `df` must have `n_trigger` as an index in order for this
+	to be possible. If no successful "clean_beta_scan" task is found by
+	`Ernesto`, an error is raised.
+	
+	Arguments
+	---------
+	Ernesto: NamedTaskBureaucrat
+		A bureaucrat pointing to a measurement in which there was a "beta_scan", 
+		and possibly (but not mandatory) a "clean_beta_scan".
+	df: pandas.DataFrame
+		The data frame you want to clean according to the "clean beta scan"
+		procedure. An index of this data frame must be the `n_trigger` column.
+	
+	Returns
+	-------
+	df: pandas.DataFrame
+		A data frame identical to `df` with a new column named `is_background`
+		that tags with `True` or `False` each `n_trigger` value.
+	"""
+	
+	Ernesto.check_required_tasks_were_run_before(['beta_scan','clean_beta_scan'])
+	
+	if 'n_trigger' not in df.index.names:
+		raise ValueError(f'`"n_trigger"` cannot be found in the index of `df`. I need it in order to match to the results of the `clean_beta_scan` task.')
+	
+	shutil.copyfile( # Put a copy of the cuts in the output directory so there is a record of what was done.
+		Ernesto.path_to_output_directory_of_task_named('clean_beta_scan')/'cuts.backup.csv',
+		Ernesto.path_to_default_output_directory/'cuts_that_were_applied.csv',
+	)
+	df = df.merge(
+		right = pandas.read_feather(Ernesto.path_to_output_directory_of_task_named('clean_beta_scan')/'result.fd').set_index('n_trigger'),
+		left_index = True, 
+		right_index = True
+	)
+	return df
 
 if __name__ == '__main__':
 	import argparse
