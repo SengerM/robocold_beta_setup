@@ -5,7 +5,7 @@ import plotly.express as px
 from uncertainties import ufloat
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 
-def time_resolution_vs_bias_voltage_DUT_and_reference_trigger(path_to_measurement_base_directory: Path, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
+def time_resolution_vs_bias_voltage_DUT_and_reference_trigger(path_to_measurement_base_directory:Path, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
 	Norberto = NamedTaskBureaucrat(
 		path_to_measurement_base_directory,
 		task_name = 'time_resolution_vs_bias_voltage',
@@ -68,6 +68,42 @@ def time_resolution_vs_bias_voltage_DUT_and_reference_trigger(path_to_measuremen
 			include_plotlyjs = 'cdn',
 		)
 
+def time_resolution_vs_bias_voltage_comparison(path_to_measurement_base_directory:Path):
+	Nicanor = NamedTaskBureaucrat(
+		path_to_measurement_base_directory,
+		task_name = 'time_resolution_vs_bias_voltage_comparison',
+		_locals = locals(),
+	)
+	
+	Nicanor.check_required_tasks_were_run_before('beta_scans')
+	
+	with Nicanor.do_your_magic():
+		time_resolutions = []
+		for submeasurement_name, path_to_submeasurement in Nicanor.find_submeasurements_of_task('beta_scans').items():
+			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='dummy_task_deleteme', _locals=locals())
+			Raul.check_required_tasks_were_run_before('time_resolution_vs_bias_voltage')
+			submeasurement_time_resolution = pandas.read_csv(Raul.path_to_output_directory_of_task_named('time_resolution_vs_bias_voltage')/'time_resolution.csv')
+			submeasurement_time_resolution['measurement_name'] = submeasurement_name
+			time_resolutions.append(submeasurement_time_resolution)
+		df = pandas.concat(time_resolutions, ignore_index=True)
+		
+		df['measurement_timestamp'] = df['measurement_name'].apply(lambda x: x.split('_')[0])
+		fig = px.line(
+			df.sort_values(['measurement_timestamp','Bias voltage (V)','signal_name']),
+			x = 'Bias voltage (V)',
+			y = 'Time resolution (s)',
+			error_y = 'Time resolution (s) error',
+			color = 'measurement_timestamp',
+			facet_col = 'signal_name',
+			markers = True,
+			title = f'Time resolution comparison<br><sup>Measurement: {Nicanor.measurement_name}</sup>',
+			hover_data = ['measurement_name'],
+		)
+		fig.write_html(
+			str(Nicanor.path_to_default_output_directory/'time_resolution_vs_bias_voltage_comparison.html'),
+			include_plotlyjs = 'cdn',
+		)
+
 if __name__ == '__main__':
 	import argparse
 
@@ -81,9 +117,10 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	time_resolution_vs_bias_voltage_DUT_and_reference_trigger(
-		Path(args.directory),
-		reference_signal_name = 'reference_trigger',
-		reference_signal_time_resolution = 17.32e-12,
-		reference_signal_time_resolution_error = 2.16e-12,
-	)
+	time_resolution_vs_bias_voltage_comparison(Path(args.directory))
+	# ~ time_resolution_vs_bias_voltage_DUT_and_reference_trigger(
+		# ~ Path(args.directory),
+		# ~ reference_signal_name = 'reference_trigger',
+		# ~ reference_signal_time_resolution = 17.32e-12,
+		# ~ reference_signal_time_resolution_error = 2.16e-12,
+	# ~ )
