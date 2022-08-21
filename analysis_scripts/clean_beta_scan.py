@@ -119,7 +119,7 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path):
 	with John.do_your_magic():
 		df = load_whole_dataframe(John.path_to_output_directory_of_script_named('beta_scan.py')/Path('parsed_from_waveforms.sqlite'))
 		
-		df = tag_is_background_according_to_the_result_of_clean_beta_scan(John, df)
+		df = tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(John, df)
 		df = df.reset_index().sort_values('signal_name')
 		
 		path_to_save_plots = John.path_to_default_output_directory/'distributions'
@@ -217,9 +217,10 @@ def script_core(path_to_measurement_base_directory:Path):
 	else:
 		raise RuntimeError(f'Dont know how to process measurement `{repr(John.measurement_name)}` located in {John.path_to_measurement_base_directory}.')
 
-def tag_is_background_according_to_the_result_of_clean_beta_scan(Ernesto:NamedTaskBureaucrat, df:pandas.DataFrame)->pandas.DataFrame:
+def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(Ernesto:NamedTaskBureaucrat, df:pandas.DataFrame)->pandas.DataFrame:
 	"""If there was a "beta scan cleaning" performed on the measurement
-	being managed by `Ernesto`, it will be used to tag each row in `df`.
+	being managed by `Ernesto`, it will be used to tag each row in `df`
+	as background or not background.
 	Note that `df` must have `n_trigger` as an index in order for this
 	to be possible. If no successful "clean_beta_scan" task is found by
 	`Ernesto`, an error is raised.
