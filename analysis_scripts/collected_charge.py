@@ -207,7 +207,7 @@ def collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directo
 		
 		df['measurement_timestamp'] = df['measurement_name'].apply(lambda x: x.split('_')[0])
 		fig = px.line(
-			df.sort_values(['Bias voltage (V)','signal_name']),
+			df.sort_values(['measurement_timestamp','Bias voltage (V)','signal_name']),
 			x = 'Bias voltage (V)',
 			y = 'Collected charge (V s)',
 			error_y = 'Collected charge (V s) error',
@@ -220,6 +220,21 @@ def collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directo
 			str(Spencer.path_to_default_output_directory/'collected_charge_vs_bias_voltage_comparison.html'),
 			include_plotlyjs = 'cdn',
 		)
+
+def script_core(path_to_measurement_base_directory:Path):
+	Manuel = NamedTaskBureaucrat(
+		path_to_measurement_base_directory,
+		task_name = 'dummy_task_deleteme',
+		_locals = locals(),
+	)
+	if Manuel.check_required_tasks_were_run_before('beta_scans', raise_error=False):
+		collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directory)
+	elif Manuel.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage', raise_error=False):
+		collected_charge_vs_bias_voltage(path_to_measurement_base_directory)
+	elif Manuel.check_required_tasks_were_run_before('beta_scan', raise_error=False):
+		collected_charge_in_beta_scan(path_to_measurement_base_directory, force=True)
+	else:
+		raise RuntimeError(f'Dont know how to process measurement {repr(Manuel.measurement_name)} located in `{Manuel.path_to_measurement_base_directory}`...')
 
 if __name__ == '__main__':
 	import argparse
@@ -234,6 +249,6 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	collected_charge_vs_bias_voltage_comparison(
+	script_core(
 		Path(args.directory),
 	)
