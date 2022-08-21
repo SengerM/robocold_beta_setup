@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas
 import plotly.express as px
 import plotly.graph_objects as go
+import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
 import numpy
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 from plot_everything_from_beta_scan import binned_fit_langauss, hex_to_rgba
@@ -13,6 +14,7 @@ from grafica.plotly_utils.utils import scatter_histogram # https://github.com/Se
 import warnings
 
 N_BOOTSTRAP = 99
+grafica.plotly_utils.utils.set_my_template_as_default()
 
 def draw_langauss_fit(fig, popt, x_values:numpy.array, color:str, name:str, normalization_coefficient:float=1, **kwargs):
 	fig.add_trace(

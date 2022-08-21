@@ -2,8 +2,11 @@ import pandas
 from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
 from pathlib import Path
 import plotly.express as px
+import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
 from uncertainties import ufloat
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
+
+grafica.plotly_utils.utils.set_my_template_as_default()
 
 def time_resolution_vs_bias_voltage_DUT_and_reference_trigger(path_to_measurement_base_directory:Path, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
 	Norberto = NamedTaskBureaucrat(
