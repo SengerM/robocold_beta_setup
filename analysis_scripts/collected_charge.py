@@ -141,6 +141,42 @@ def collected_charge_in_beta_scan(path_to_measurement_base_directory:Path, force
 			)
 		collected_charge_final_results_df = pandas.DataFrame(collected_charge_final_results).set_index('signal_name')
 		collected_charge_final_results_df.to_csv(Norberto.path_to_default_output_directory/'collected_charge.csv')
+
+def collected_charge_vs_bias_voltage(path_to_measurement_base_directory:Path, force_calculation_on_submeasurements:bool=False):
+	Romina = NamedTaskBureaucrat(
+		path_to_measurement_base_directory,
+		task_name = 'collected_charge_vs_bias_voltage',
+		_locals = locals(),
+	)
+	
+	Romina.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage')
+	with Romina.do_your_magic():
+		collected_charges = []
+		for submeasurement_name, path_to_submeasurement in Romina.find_submeasurements_of_task('beta_scan_sweeping_bias_voltage').items():
+			collected_charge_in_beta_scan(
+				path_to_measurement_base_directory = path_to_submeasurement,
+				force = force_calculation_on_submeasurements,
+			)
+			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='no_task', _locals=locals())
+			submeasurement_charge = pandas.read_csv(Raul.path_to_output_directory_of_task_named('collected_charge_in_beta_scan')/'collected_charge.csv')
+			submeasurement_charge['measurement_name'] = submeasurement_name
+			submeasurement_charge['Bias voltage (V)'] = float(submeasurement_name.split('_')[-1].replace('V',''))
+			collected_charges.append(submeasurement_charge)
+		collected_charge_df = pandas.concat(collected_charges, ignore_index=True)
+		
+		fig = px.line(
+			collected_charge_df.sort_values(['Bias voltage (V)','signal_name']),
+			x = 'Bias voltage (V)',
+			y = 'Collected charge (V s)',
+			error_y = 'Collected charge (V s) error',
+			color = 'signal_name',
+			title = f'Collected charge vs bias voltage<br><sup>Measurement: {Romina.measurement_name}</sup>',
+			markers = True,
+		)
+		fig.write_html(
+			str(Romina.path_to_default_output_directory/'collected_charge_vs_bias_voltage.html'),
+			include_plotlyjs = 'cdn',
+		)
 		
 if __name__ == '__main__':
 	import argparse
@@ -155,7 +191,7 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	collected_charge_in_beta_scan(
+	collected_charge_vs_bias_voltage(
 		Path(args.directory),
-		force = True,
+		force_calculation_on_submeasurements = False,
 	)
