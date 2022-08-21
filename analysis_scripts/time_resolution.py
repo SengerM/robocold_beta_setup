@@ -104,6 +104,24 @@ def time_resolution_vs_bias_voltage_comparison(path_to_measurement_base_director
 			include_plotlyjs = 'cdn',
 		)
 
+def script_core(path_to_measurement_base_directory:Path):
+	Manuel = NamedTaskBureaucrat(
+		path_to_measurement_base_directory,
+		task_name = 'dummy_task_deleteme',
+		_locals = locals(),
+	)
+	if Manuel.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage', raise_error=False):
+		time_resolution_vs_bias_voltage_DUT_and_reference_trigger(
+			path_to_measurement_base_directory = path_to_measurement_base_directory,
+			reference_signal_name = 'reference_trigger',
+			reference_signal_time_resolution = 17.32e-12, # My best characterization of the Photonis PMT.
+			reference_signal_time_resolution_error = 2.16e-12, # My best characterization of the Photonis PMT.
+		)
+	elif Manuel.check_required_tasks_were_run_before('beta_scans', raise_error=False):
+		time_resolution_vs_bias_voltage_comparison(path_to_measurement_base_directory)
+	else:
+		raise RuntimeError(f'Dont know how to process measurement {repr(Manuel.measurement_name)} located in `{Manuel.path_to_measurement_base_directory}`...')
+
 if __name__ == '__main__':
 	import argparse
 
@@ -117,10 +135,4 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	time_resolution_vs_bias_voltage_comparison(Path(args.directory))
-	# ~ time_resolution_vs_bias_voltage_DUT_and_reference_trigger(
-		# ~ Path(args.directory),
-		# ~ reference_signal_name = 'reference_trigger',
-		# ~ reference_signal_time_resolution = 17.32e-12,
-		# ~ reference_signal_time_resolution_error = 2.16e-12,
-	# ~ )
+	script_core(Path(args.directory))
