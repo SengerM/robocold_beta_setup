@@ -86,11 +86,13 @@ def time_resolution_vs_bias_voltage_comparison(path_to_measurement_base_director
 			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='dummy_task_deleteme', _locals=locals())
 			Raul.check_required_tasks_were_run_before('time_resolution_vs_bias_voltage')
 			submeasurement_time_resolution = pandas.read_csv(Raul.path_to_output_directory_of_task_named('time_resolution_vs_bias_voltage')/'time_resolution.csv')
-			submeasurement_time_resolution['measurement_name'] = submeasurement_name
+			submeasurement_time_resolution['beta_scan_vs_bias_voltage'] = submeasurement_name
 			time_resolutions.append(submeasurement_time_resolution)
 		df = pandas.concat(time_resolutions, ignore_index=True)
 		
-		df['measurement_timestamp'] = df['measurement_name'].apply(lambda x: x.split('_')[0])
+		df.to_csv(Nicanor.path_to_default_output_directory/'time_resolution.csv', index=False)
+		
+		df['measurement_timestamp'] = df['beta_scan_vs_bias_voltage'].apply(lambda x: x.split('_')[0])
 		fig = px.line(
 			df.sort_values(['measurement_timestamp','Bias voltage (V)','signal_name']),
 			x = 'Bias voltage (V)',
@@ -100,7 +102,12 @@ def time_resolution_vs_bias_voltage_comparison(path_to_measurement_base_director
 			facet_col = 'signal_name',
 			markers = True,
 			title = f'Time resolution comparison<br><sup>Measurement: {Nicanor.measurement_name}</sup>',
-			hover_data = ['measurement_name'],
+			hover_data = ['beta_scan_vs_bias_voltage','measurement_name'],
+			labels = {
+				'measurement_name': 'Beta scan',
+				'beta_scan_vs_bias_voltage': 'Beta scan vs bias voltage',
+				'measurement_timestamp': 'Measurement timestamp',
+			}
 		)
 		fig.write_html(
 			str(Nicanor.path_to_default_output_directory/'time_resolution_vs_bias_voltage_comparison.html'),

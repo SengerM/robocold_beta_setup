@@ -203,11 +203,13 @@ def collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directo
 			)
 			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='no_task', _locals=locals())
 			submeasurement_charge_vs_bias_voltage = pandas.read_csv(Raul.path_to_output_directory_of_task_named('collected_charge_vs_bias_voltage')/'collected_charge_vs_bias_voltage.csv')
-			submeasurement_charge_vs_bias_voltage['measurement_name'] = submeasurement_name
+			submeasurement_charge_vs_bias_voltage['beta_scan_vs_bias_voltage'] = submeasurement_name
 			collected_charges.append(submeasurement_charge_vs_bias_voltage)
 		df = pandas.concat(collected_charges, ignore_index=True)
 		
-		df['measurement_timestamp'] = df['measurement_name'].apply(lambda x: x.split('_')[0])
+		df.to_csv(Spencer.path_to_default_output_directory/'collected_charge.csv', index=False)
+		
+		df['measurement_timestamp'] = df['beta_scan_vs_bias_voltage'].apply(lambda x: x.split('_')[0])
 		fig = px.line(
 			df.sort_values(['measurement_timestamp','Bias voltage (V)','signal_name']),
 			x = 'Bias voltage (V)',
@@ -217,6 +219,12 @@ def collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directo
 			facet_col = 'signal_name',
 			markers = True,
 			title = f'Collected charge comparison<br><sup>Measurement: {Spencer.measurement_name}</sup>',
+			hover_data = ['beta_scan_vs_bias_voltage','measurement_name'],
+			labels = {
+				'measurement_name': 'Beta scan',
+				'beta_scan_vs_bias_voltage': 'Beta scan vs bias voltage',
+				'measurement_timestamp': 'Measurement timestamp',
+			}
 		)
 		fig.write_html(
 			str(Spencer.path_to_default_output_directory/'collected_charge_vs_bias_voltage_comparison.html'),
