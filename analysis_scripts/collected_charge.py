@@ -164,6 +164,11 @@ def collected_charge_vs_bias_voltage(path_to_measurement_base_directory:Path, fo
 			collected_charges.append(submeasurement_charge)
 		collected_charge_df = pandas.concat(collected_charges, ignore_index=True)
 		
+		collected_charge_df.to_csv(
+			Romina.path_to_default_output_directory/'collected_charge_vs_bias_voltage.csv',
+			index = False,
+		)
+		
 		fig = px.line(
 			collected_charge_df.sort_values(['Bias voltage (V)','signal_name']),
 			x = 'Bias voltage (V)',
@@ -177,7 +182,45 @@ def collected_charge_vs_bias_voltage(path_to_measurement_base_directory:Path, fo
 			str(Romina.path_to_default_output_directory/'collected_charge_vs_bias_voltage.html'),
 			include_plotlyjs = 'cdn',
 		)
+
+def collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directory:Path):
+	Spencer = NamedTaskBureaucrat(
+		path_to_measurement_base_directory,
+		task_name = 'collected_charge_vs_bias_voltage_comparison',
+		_locals = locals(),
+	)
+	
+	Spencer.check_required_tasks_were_run_before('beta_scans')
+	
+	with Spencer.do_your_magic():
+		collected_charges = []
+		for submeasurement_name, path_to_submeasurement in Spencer.find_submeasurements_of_task('beta_scans').items():
+			collected_charge_vs_bias_voltage(
+				path_to_measurement_base_directory = path_to_submeasurement,
+				force_calculation_on_submeasurements = False,
+			)
+			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='no_task', _locals=locals())
+			submeasurement_charge_vs_bias_voltage = pandas.read_csv(Raul.path_to_output_directory_of_task_named('collected_charge_vs_bias_voltage')/'collected_charge_vs_bias_voltage.csv')
+			submeasurement_charge_vs_bias_voltage['measurement_name'] = submeasurement_name
+			collected_charges.append(submeasurement_charge_vs_bias_voltage)
+		df = pandas.concat(collected_charges, ignore_index=True)
 		
+		df['measurement_timestamp'] = df['measurement_name'].apply(lambda x: x.split('_')[0])
+		fig = px.line(
+			df.sort_values(['Bias voltage (V)','signal_name']),
+			x = 'Bias voltage (V)',
+			y = 'Collected charge (V s)',
+			error_y = 'Collected charge (V s) error',
+			color = 'measurement_timestamp',
+			facet_col = 'signal_name',
+			markers = True,
+			title = f'Collected charge comparison<br><sup>Measurement: {Spencer.measurement_name}</sup>',
+		)
+		fig.write_html(
+			str(Spencer.path_to_default_output_directory/'collected_charge_vs_bias_voltage_comparison.html'),
+			include_plotlyjs = 'cdn',
+		)
+
 if __name__ == '__main__':
 	import argparse
 
@@ -191,7 +234,6 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	collected_charge_vs_bias_voltage(
+	collected_charge_vs_bias_voltage_comparison(
 		Path(args.directory),
-		force_calculation_on_submeasurements = False,
 	)
