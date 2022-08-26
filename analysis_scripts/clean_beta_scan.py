@@ -102,7 +102,7 @@ def clean_beta_scan_submeasurements_using_the_same_cuts_for_all(path_to_measurem
 		clean_beta_scan(path_to_submeasurement, path_to_cuts_file)
 		plot_beta_scan_after_cleaning(path_to_submeasurement)
 
-def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path):
+def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path, scatter_plot:bool=True, langauss_plots:bool=True, distributions:bool=False):
 	COLOR_DISCRETE_MAP = {
 		True: '#ff5c5c',
 		False: '#27c200',
@@ -122,85 +122,88 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path):
 		df = tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(John, df)
 		df = df.reset_index().sort_values('signal_name')
 		
-		path_to_save_plots = John.path_to_default_output_directory/'distributions'
-		path_to_save_plots.mkdir(exist_ok = True)
-		for col in df.columns:
-			if col in {'signal_name','n_trigger','is_background'}:
-				continue
-			fig = px.histogram(
+		if distributions:
+			path_to_save_plots = John.path_to_default_output_directory/'distributions'
+			path_to_save_plots.mkdir(exist_ok = True)
+			for col in df.columns:
+				if col in {'signal_name','n_trigger','is_background'}:
+					continue
+				fig = px.histogram(
+					df,
+					title = f'{col} histogram<br><sup>Measurement: {John.measurement_name}</sup>',
+					x = col,
+					facet_row = 'signal_name',
+					color = 'is_background',
+					color_discrete_map = COLOR_DISCRETE_MAP,
+				)
+				fig.write_html(
+					str(path_to_save_plots/Path(f'{col} histogram.html')),
+					include_plotlyjs = 'cdn',
+				)
+				
+				fig = px.ecdf(
+					df,
+					title = f'{col} ECDF<br><sup>Measurement: {John.measurement_name}</sup>',
+					x = col,
+					facet_row = 'signal_name',
+					color = 'is_background',
+					color_discrete_map = COLOR_DISCRETE_MAP,
+				)
+				fig.write_html(
+					str(path_to_save_plots/Path(f'{col} ecdf.html')),
+					include_plotlyjs = 'cdn',
+				)
+				
+		if scatter_plot:
+			columns_for_scatter_matrix_plot = set(df.columns) 
+			columns_for_scatter_matrix_plot -= {'n_trigger','signal_name','is_background'} 
+			columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
+			columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
+			fig = px.scatter_matrix(
 				df,
-				title = f'{col} histogram<br><sup>Measurement: {John.measurement_name}</sup>',
-				x = col,
-				facet_row = 'signal_name',
+				dimensions = sorted(columns_for_scatter_matrix_plot),
+				title = f'Scatter matrix plot<br><sup>Measurement: {John.measurement_name}</sup>',
+				symbol = 'signal_name',
 				color = 'is_background',
+				hover_data = ['n_trigger'],
 				color_discrete_map = COLOR_DISCRETE_MAP,
 			)
-			fig.write_html(
-				str(path_to_save_plots/Path(f'{col} histogram.html')),
-				include_plotlyjs = 'cdn',
-			)
-			
-			fig = px.ecdf(
-				df,
-				title = f'{col} ECDF<br><sup>Measurement: {John.measurement_name}</sup>',
-				x = col,
-				facet_row = 'signal_name',
-				color = 'is_background',
-				color_discrete_map = COLOR_DISCRETE_MAP,
-			)
-			fig.write_html(
-				str(path_to_save_plots/Path(f'{col} ecdf.html')),
-				include_plotlyjs = 'cdn',
-			)
-			
-		columns_for_scatter_matrix_plot = set(df.columns) 
-		columns_for_scatter_matrix_plot -= {'n_trigger','signal_name','is_background'} 
-		columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
-		columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
-		fig = px.scatter_matrix(
-			df,
-			dimensions = sorted(columns_for_scatter_matrix_plot),
-			title = f'Scatter matrix plot<br><sup>Measurement: {John.measurement_name}</sup>',
-			symbol = 'signal_name',
-			color = 'is_background',
-			hover_data = ['n_trigger'],
-			color_discrete_map = COLOR_DISCRETE_MAP,
-		)
-		fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
-		for k in range(len(fig.data)):
-			fig.data[k].update(
-				selected = dict(
-					marker = dict(
-						opacity = 1,
-						color = 'black',
-					)
-				),
-			)
-		fig.write_html(
-			str(John.path_to_default_output_directory/Path('scatter matrix plot.html')),
-			include_plotlyjs = 'cdn',
-		)
-		
-		for col in {'Amplitude (V)','Collected charge (V s)'}:
-			fig = go.Figure()
-			fig.update_layout(
-				title = f'Langauss fit to {col} after cleaning<br><sup>Measurement: {John.measurement_name}</sup>',
-				xaxis_title = col,
-				yaxis_title = 'count',
-			)
-			colors = iter(px.colors.qualitative.Plotly)
-			for signal_name in sorted(set(df['signal_name'])):
-				draw_histogram_and_langauss_fit(
-					fig = fig,
-					parsed_from_waveforms_df = df.query('is_background==False').set_index(['n_waveform','signal_name']),
-					signal_name = signal_name,
-					column_name = col,
-					line_color = next(colors),
+			fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
+			for k in range(len(fig.data)):
+				fig.data[k].update(
+					selected = dict(
+						marker = dict(
+							opacity = 1,
+							color = 'black',
+						)
+					),
 				)
 			fig.write_html(
-				str(John.path_to_default_output_directory/Path(f'langauss fit to {col}.html')),
+				str(John.path_to_default_output_directory/Path('scatter matrix plot.html')),
 				include_plotlyjs = 'cdn',
 			)
+		
+		if langauss_plots:
+			for col in {'Amplitude (V)','Collected charge (V s)'}:
+				fig = go.Figure()
+				fig.update_layout(
+					title = f'Langauss fit to {col} after cleaning<br><sup>Measurement: {John.measurement_name}</sup>',
+					xaxis_title = col,
+					yaxis_title = 'count',
+				)
+				colors = iter(px.colors.qualitative.Plotly)
+				for signal_name in sorted(set(df['signal_name'])):
+					draw_histogram_and_langauss_fit(
+						fig = fig,
+						parsed_from_waveforms_df = df.query('is_background==False').set_index(['n_waveform','signal_name']),
+						signal_name = signal_name,
+						column_name = col,
+						line_color = next(colors),
+					)
+				fig.write_html(
+					str(John.path_to_default_output_directory/Path(f'langauss fit to {col}.html')),
+					include_plotlyjs = 'cdn',
+				)
 
 def script_core(path_to_measurement_base_directory:Path):
 	John = NamedTaskBureaucrat(
