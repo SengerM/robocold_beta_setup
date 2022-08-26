@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
+from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from pathlib import Path
 import pandas
 import datetime
@@ -34,14 +34,10 @@ def measure_data(slot_number:int, average_at_least_during_seconds:float, average
 		
 	return measured_data
 
-def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:str, name_to_access_to_the_setup:str, silent=False)->Path:
+def script_core(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, silent=False)->Path:
 	THREADS_SLEEPING_SECONDS = 1
 	
-	Alberto = NamedTaskBureaucrat(
-		path_to_directory_in_which_to_store_data/Path(measurement_name),
-		task_name = 'monitor_standby_conditions',
-		_locals = locals(),
-	)
+	Alberto = bureaucrat
 	
 	the_setup = connect_me_with_the_setup()
 	
@@ -107,8 +103,8 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 		telegram_chat_id = my_telegram_bots.chat_ids['Long term tests setup'],
 	)
 	
-	with Alberto.do_your_magic(clean_default_output_directory = False):
-		path_to_sqlite_database = Alberto.path_to_default_output_directory/Path('measured_data.sqlite')
+	with Alberto.handle_task(task_name='detectors_monitoring', drop_old_data=False) as detectors_monitoring_task_handler:
+		path_to_sqlite_database = detectors_monitoring_task_handler.path_to_directory_of_my_task/Path('measured_data.sqlite')
 		with SQLiteDataFrameDumper(path_to_sqlite_database, dump_after_n_appends=1e3, dump_after_seconds=10, delete_database_if_already_exists=False) as measured_data_dumper:
 			threads = []
 			for slot_number in the_setup.get_slots_configuration_df().index:
@@ -141,11 +137,10 @@ def script_core(path_to_directory_in_which_to_store_data:Path, measurement_name:
 
 if __name__=='__main__':
 	import os
-	from configuration_files.current_run import CURRENT_RUN_NAME
+	from configuration_files.current_run import Alberto
 	
 	script_core(
-		path_to_directory_in_which_to_store_data = Path('/home/sengerm/measurements_data'),
-		measurement_name = CURRENT_RUN_NAME,
+		bureaucrat = Alberto,
 		name_to_access_to_the_setup = f'monitoring_standby_conditions_{os.getpid()}',
 		silent = False,
 	)
