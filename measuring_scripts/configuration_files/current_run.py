@@ -1,1 +1,4 @@
-CURRENT_RUN_NAME = '20220816000000_Robocold_setup_test_run'
+from pathlib import Path
+from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
+
+Alberto = RunBureaucrat(Path.home()/Path('measurements_data/20220826000000_Robocold_setup_test_run_2'))

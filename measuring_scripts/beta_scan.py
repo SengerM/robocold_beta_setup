@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
+from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from pathlib import Path
 import pandas
 import datetime
@@ -14,10 +14,6 @@ from signals.PeakSignal import PeakSignal, draw_in_plotly # https://github.com/S
 from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
 import my_telegram_bots
 import numpy
-PATH_TO_ANALYSIS_SCRIPTS = Path(__file__).resolve().parent.parent/'analysis_scripts'
-import sys
-sys.path.append(str(PATH_TO_ANALYSIS_SCRIPTS))
-from plot_everything_from_beta_scan import plot_everything_from_beta_scan
 
 def parse_waveform(signal:PeakSignal):
 	parsed = {
@@ -100,15 +96,13 @@ def plot_waveform(signal):
 			pass
 	return fig
 
-def beta_scan(path_to_directory_in_which_to_store_data:Path, measurement_name:str, name_to_access_to_the_setup:str, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False)->Path:
+def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False)->Path:
 	"""Perform a beta scan.
 	
 	Parameters
 	----------
-	path_to_directory_in_which_to_store_data: Path
-		Path to the directory where to store the data.
-	measurement_name: str
-		A name for the measurement.
+	bureaucrat: RunBureaucrat
+		The bureaucrat that will manage this measurement.
 	n_triggers: int
 		Number of triggers to record.
 	name_to_access_to_the_setup: str
@@ -138,12 +132,8 @@ def beta_scan(path_to_directory_in_which_to_store_data:Path, measurement_name:st
 		A path to the directory where the measurement's data was stored.
 	"""
 	
-	John = NamedTaskBureaucrat(
-		path_to_directory_in_which_to_store_data/Path(measurement_name),
-		task_name = 'beta_scan',
-		new_measurement = True,
-		_locals = locals(),
-	)
+	John = bureaucrat
+	John.create_run()
 	
 	the_setup = connect_me_with_the_setup()
 	
@@ -158,10 +148,10 @@ def beta_scan(path_to_directory_in_which_to_store_data:Path, measurement_name:st
 	with the_setup.hold_signal_acquisition(who=name_to_access_to_the_setup), the_setup.hold_control_of_bias_for_slot_number(slot_number, who=name_to_access_to_the_setup), the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
 		if not silent:
 			print('Control of hardware acquired.')
-		with John.do_your_magic():
-			with open(John.path_to_default_output_directory/'setup_description.txt','w') as ofile:
+		with John.handle_task('beta_scan') as beta_scan_task_bureaucrat:
+			with open(beta_scan_task_bureaucrat.path_to_directory_of_my_task/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
-			with SQLiteDataFrameDumper(John.path_to_default_output_directory/Path('measured_stuff.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as measured_stuff_dumper, SQLiteDataFrameDumper(John.path_to_default_output_directory/Path('waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as waveforms_dumper, SQLiteDataFrameDumper(John.path_to_default_output_directory/Path('parsed_from_waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as parsed_from_waveforms_dumper:
+			with SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('measured_stuff.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as measured_stuff_dumper, SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as waveforms_dumper, SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as parsed_from_waveforms_dumper:
 				if not silent:
 					print(f'Moving beta source to slot number {slot_number}...')
 				the_setup.move_to_slot(slot_number, who=name_to_access_to_the_setup)
@@ -172,7 +162,7 @@ def beta_scan(path_to_directory_in_which_to_store_data:Path, measurement_name:st
 					print(f'Setting bias voltage {bias_voltage} V to slot number {slot_number}...')
 				the_setup.set_bias_voltage(slot_number=slot_number, volts=bias_voltage, who=name_to_access_to_the_setup)
 				
-				with reporter.report_for_loop(n_triggers, measurement_name) as reporter:
+				with reporter.report_for_loop(n_triggers, John.run_name) as reporter:
 					n_waveform = -1
 					for n_trigger in range(n_triggers):
 						# Acquire ---
@@ -225,31 +215,26 @@ def beta_scan(path_to_directory_in_which_to_store_data:Path, measurement_name:st
 							for signal_name in the_setup.get_oscilloscope_configuration_df().index:
 								fig = plot_waveform(this_trigger_waveforms_dict[signal_name])
 								fig.update_layout(
-									title = f'n_trigger {n_trigger}, signal_name {signal_name}<br><sup>Measurement: {measurement_name}</sup>',
+									title = f'n_trigger {n_trigger}, signal_name {signal_name}<br><sup>Run: {John.run_name}</sup>',
 								)
-								path_to_save_plots = John.path_to_default_output_directory/Path('plots of some of the signals')
+								path_to_save_plots = beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('plots of some of the waveforms')
 								path_to_save_plots.mkdir(exist_ok=True)
 								fig.write_html(
 									str(path_to_save_plots/Path(f'n_trigger {n_trigger} signal_name {signal_name}.html')),
 									include_plotlyjs = 'cdn',
 								)
-						
 						reporter.update(1) 
 	
 	if not silent:
 		print('Beta scan finished.')
-	
-	return John.path_to_measurement_base_directory
 
-def beta_scan_sweeping_bias_voltage(path_to_directory_in_which_to_store_data:Path, measurement_name:str, name_to_access_to_the_setup:str, slot_number:int, n_triggers_per_voltage:int, bias_voltages:list, software_triggers:list=None, silent=False)->Path:
+def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers_per_voltage:int, bias_voltages:list, software_triggers:list=None, silent=False)->Path:
 	"""Perform multiple beta scans at different bias voltages each.
 	
 	Parameters
 	----------
-	path_to_directory_in_which_to_store_data: Path
-		Path to the directory where to store the data.
-	measurement_name: str
-		A name for the measurement.
+	bureaucrat: RunBureaucrat
+		The bureaucrat that will handle this measurement.
 	n_triggers_per_voltage: int
 		Number of triggers to record on each individual beta scan.
 	name_to_access_to_the_setup: str
@@ -269,12 +254,8 @@ def beta_scan_sweeping_bias_voltage(path_to_directory_in_which_to_store_data:Pat
 	path_to_measurement_base_directory: Path
 		A path to the directory where the measurement's data was stored.
 	"""
-	John = NamedTaskBureaucrat(
-		path_to_directory_in_which_to_store_data/Path(measurement_name),
-		task_name = 'beta_scan_sweeping_bias_voltage',
-		new_measurement = True,
-		_locals = locals(),
-	)
+	John = bureaucrat
+	John.create_run()
 	
 	the_setup = connect_me_with_the_setup()
 	
@@ -291,17 +272,16 @@ def beta_scan_sweeping_bias_voltage(path_to_directory_in_which_to_store_data:Pat
 	with the_setup.hold_signal_acquisition(who=name_to_access_to_the_setup), the_setup.hold_control_of_bias_for_slot_number(slot_number, who=name_to_access_to_the_setup), the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
 		if not silent:
 			print('Control of hardware acquired.')
-		with John.do_your_magic():
-			with open(John.path_to_default_output_directory/'setup_description.txt','w') as ofile:
+		with John.handle_task('beta_scan_sweeping_bias_voltage') as beta_scan_sweeping_bias_voltage_task_bureaucrat:
+			with open(beta_scan_sweeping_bias_voltage_task_bureaucrat.path_to_directory_of_my_task/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
 			
-			with reporter.report_for_loop(len(bias_voltages), measurement_name) as reporter:
+			with reporter.report_for_loop(len(bias_voltages), John.run_name) as reporter:
 				if software_triggers is None:
 					software_triggers = [lambda x: True for v in bias_voltages]
 				for bias_voltage,software_trigger in zip(bias_voltages,software_triggers):
 					p = beta_scan(
-						path_to_directory_in_which_to_store_data = John.path_to_submeasurements_directory,
-						measurement_name = f'{measurement_name}_{bias_voltage}V',
+						beta_scan_sweeping_bias_voltage_task_bureaucrat.create_subrun(f'{the_setup.get_name_of_device_in_slot_number(slot_number)}_{int(bias_voltage)}V'),
 						name_to_access_to_the_setup = name_to_access_to_the_setup,
 						slot_number = slot_number,
 						n_triggers = n_triggers_per_voltage,
@@ -309,12 +289,16 @@ def beta_scan_sweeping_bias_voltage(path_to_directory_in_which_to_store_data:Pat
 						software_trigger = software_trigger,
 						silent = silent,
 					)
-					plot_everything_from_beta_scan(p)
 					reporter.update(1)
 				
 if __name__=='__main__':
 	import os
-	from configuration_files.current_run import CURRENT_RUN_NAME
+	from configuration_files.current_run import Alberto
+	PATH_TO_ANALYSIS_SCRIPTS = Path(__file__).resolve().parent.parent/'analysis_scripts'
+	import sys
+	sys.path.append(str(PATH_TO_ANALYSIS_SCRIPTS))
+	from plot_everything_from_beta_scan import plot_everything_from_beta_scan
+	from utils import create_a_timestamp
 	
 	def software_trigger(signals_dict, minimum_DUT_amplitude:float):
 		DUT_signal = signals_dict['DUT']
@@ -325,23 +309,19 @@ if __name__=='__main__':
 	
 	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
 	
+	BIAS_VOLTAGES = numpy.linspace(150,300,8)
+	
 	# ------------------------------------------------------------------
 	
-	John = NamedTaskBureaucrat(
-		Path.home()/Path('measurements_data')/CURRENT_RUN_NAME,
-		task_name = 'beta_scans',
-		_locals = locals(),
-	)
 	
-	with John.do_your_magic(clean_default_output_directory = False):
-		John.path_to_submeasurements_directory.mkdir(exist_ok=True)
+	with Alberto.handle_task('beta_scans', drop_old_data=False) as beta_scans_task_bureaucrat:
+		John = beta_scans_task_bureaucrat.create_subrun(create_a_timestamp() + '_' + input('Measurement name? ').replace(' ','_'))
 		beta_scan_sweeping_bias_voltage(
-			path_to_directory_in_which_to_store_data = John.path_to_submeasurements_directory,
-			measurement_name = input('Measurement name? ').replace(' ','_'),
+			bureaucrat = John,
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
-			slot_number = 7,
-			n_triggers_per_voltage = 1111,
-			bias_voltages = [150,160,170,180,190,194],
+			slot_number = 1,
+			n_triggers_per_voltage = 22,
+			bias_voltages = BIAS_VOLTAGES,
 			silent = False,
-			software_triggers = [lambda x,A=A: software_trigger(x, A) for A in [.01,.02,.03,.05,.1,.1]],
+			software_triggers = [lambda x,A=0: software_trigger(x, A) for V in BIAS_VOLTAGES],
 		)
