@@ -1,5 +1,5 @@
 import pandas
-from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
+from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from pathlib import Path
 import plotly.express as px
 import plotly.graph_objects as go
@@ -9,6 +9,7 @@ from scipy.stats import median_abs_deviation
 from scipy.optimize import curve_fit
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import shutil
+from clean_beta_scan import tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan
 
 N_BOOTSTRAP = 99
 STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION = 'sigma_from_gaussian_fit' # For the time resolution I will use the `sigma_from_gaussian_fit` because in practice ends up being the most robust and reliable of all.
@@ -226,13 +227,13 @@ def plot_cfd(jitter_df, constant_fraction_discriminator_thresholds_to_use_for_th
 		figs[col] = fig
 	return figs
 
-def jitter_calculation_beta_scan(path_to_measurement_base_directory:Path, CFD_thresholds='best', force:bool=False):
+def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best', force:bool=False):
 	"""Calculates the jitter from a beta scan between two devices.
 	
 	Arguments
 	---------
-	path_to_measurement_base_directory: Path
-		Path to the measurement that contains the beta scan.
+	bureaucrat: RunBureaucrat
+		A bureaucrat to handle this run.
 	CFD_thresholds: str or dict, default `'best'`
 		If `'best'`, then the CFD thresholds are chosen such that the
 		jitter is minimized. If a dictionary, it must be of the form:
@@ -246,34 +247,27 @@ def jitter_calculation_beta_scan(path_to_measurement_base_directory:Path, CFD_th
 		no previous calculation of it.
 	"""
 	
-	Norberto = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'jitter_calculation_beta_scan',
-		_locals = locals(),
-	)
+	Norberto = bureaucrat
 	
-	Norberto.check_required_tasks_were_run_before('beta_scan')
+	Norberto.check_these_tasks_were_run_successfully('beta_scan')
 	
 	if not (CFD_thresholds != 'best' or not isinstance(CFD_thresholds, dict)):
 		raise ValueError('Wrong value for `CFD_thresholds`, please read the documentation of this function.')
 	
-	if force == False and Norberto.task_was_applied_without_errors(): # If this was already done, don't do it again...
+	TASK_NAME = 'jitter_calculation_beta_scan'
+	
+	if force == False and Norberto.was_task_run_successfully(TASK_NAME): # If this was already done, don't do it again...
 		return
 	
-	with Norberto.do_your_magic():
-		data_df = load_whole_dataframe(Norberto.path_to_output_directory_of_script_named('beta_scan.py')/Path('parsed_from_waveforms.sqlite'))
+	with Norberto.handle_task(TASK_NAME) as Norbertos_employee:
+		data_df = load_whole_dataframe(Norberto.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 		
-		if Norberto.check_required_scripts_were_run_before('clean_beta_scan.py', raise_error=False): # If there was a cleaning done, let's take it into account...
+		if Norberto.check_these_tasks_were_run_successfully('clean_beta_scan', raise_error=False): # If there was a cleaning done, let's take it into account...
 			shutil.copyfile( # Put a copy of the cuts in the output directory so there is a record of what was done.
-				Norberto.path_to_output_directory_of_script_named('clean_beta_scan.py')/Path('cuts.backup.csv'),
-				Norberto.path_to_default_output_directory/Path('cuts_that_were_applied.csv')
+				Norberto.path_to_directory_of_task('clean_beta_scan')/Path('cuts.backup.csv'),
+				Norbertos_employee.path_to_directory_of_my_task/'cuts_that_were_applied.csv',
 			)
-			data_df = data_df.merge(
-				right = pandas.read_feather(Norberto.path_to_output_directory_of_script_named('clean_beta_scan.py')/Path('result.fd')).set_index('n_trigger'),
-				left_index = True, 
-				right_index = True
-			)
-			data_df = data_df.query('is_background==False').copy().drop('is_background',axis=1) # From now on we drop all background triggers.
+			data_df = tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(Norberto, data_df).query('is_background==False').drop(columns='is_background')
 		
 		set_of_measured_signals = set(data_df.index.get_level_values('signal_name'))
 		if len(set_of_measured_signals) == 2:
@@ -325,14 +319,14 @@ def jitter_calculation_beta_scan(path_to_measurement_base_directory:Path, CFD_th
 			else: # Do some plots
 				figs = plot_cfd(jitter_df, constant_fraction_discriminator_thresholds_to_use_for_the_jitter)
 				for key,fig in figs.items():
-					fig.update_layout(title=f'CFD jitter measured using {key} from Δt<br><sup>Measurement: {Norberto.measurement_name}</sup>')
-				figs[STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION].write_html(str(Norberto.path_to_default_output_directory/f'CFD jitter using {key}.html'), include_plotlyjs='cdn')
+					fig.update_layout(title=f'CFD jitter measured using {key} from Δt<br><sup>Run: {Norberto.run_name}</sup>')
+				figs[STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION].write_html(str(Norbertos_employee.path_to_directory_of_my_task/f'CFD jitter using {key}.html'), include_plotlyjs='cdn')
 				
 				fig = go.Figure()
 				fig.update_layout(
 					yaxis_title = 'count',
 					xaxis_title = 'Δt (s)',
-					title = f'Δt for {Δt_df.index.names[0]}={constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]} and {Δt_df.index.names[1]}={constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]}<br><sup>Measurement: {Norberto.measurement_name}</sup>'
+					title = f'Δt for {Δt_df.index.names[0]}={constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]} and {Δt_df.index.names[1]}={constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]}<br><sup>Run: {Norberto.run_name}</sup>'
 				)
 				selected_Δt_samples = Δt_df.loc[constant_fraction_discriminator_thresholds_to_use_for_the_jitter]
 				selected_Δt_samples = selected_Δt_samples.to_numpy()
@@ -363,7 +357,7 @@ def jitter_calculation_beta_scan(path_to_measurement_base_directory:Path, CFD_th
 					)
 				)
 				fig.write_html(
-					str(Norberto.path_to_default_output_directory/Path(f'Delta_t distribution and fit where jitter was obtained from.html')),
+					str(Norbertos_employee.path_to_directory_of_my_task/Path(f'Delta_t distribution and fit where jitter was obtained from.html')),
 					include_plotlyjs = 'cdn',
 				)
 
@@ -376,11 +370,11 @@ def jitter_calculation_beta_scan(path_to_measurement_base_directory:Path, CFD_th
 				'Jitter (s) error': df['Jitter (s)'].std(),
 			}
 		)
-		jitter.to_csv(Norberto.path_to_default_output_directory/'jitter.csv', header=False)
+		jitter.to_csv(Norbertos_employee.path_to_directory_of_my_task/'jitter.csv', header=False)
 		
 		fig = go.Figure()
 		fig.update_layout(
-			title = f'Statistics for the jitter<br><sup>Measurement: {Norberto.measurement_name}</sup>',
+			title = f'Statistics for the jitter<br><sup>Run: {Norberto.run_name}</sup>',
 			xaxis_title = 'Jitter (s)',
 			yaxis_title = 'count',
 		)
@@ -405,30 +399,26 @@ def jitter_calculation_beta_scan(path_to_measurement_base_directory:Path, CFD_th
 			fillcolor = 'black',
 		)
 		fig.write_html(
-			str(Norberto.path_to_default_output_directory/Path(f'histogram bootstrap.html')),
+			str(Norbertos_employee.path_to_directory_of_my_task/Path(f'histogram bootstrap.html')),
 			include_plotlyjs = 'cdn',
 		)
 
-def jitter_calculation_beta_scan_sweeping_voltage(path_to_measurement_base_directory:Path, CFD_thresholds, force_calculation_on_submeasurements:bool=False):
-	Norberto = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'jitter_calculation_beta_scan_sweeping_voltage',
-		_locals = locals(),
-	)
+def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_thresholds='best', force_calculation_on_submeasurements:bool=False):
+	Norberto = bureaucrat
 	
-	Norberto.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage')
+	Norberto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
-	with Norberto.do_your_magic():
+	with Norberto.handle_task('jitter_calculation_beta_scan_sweeping_voltage') as Norbertos_employee:
 		jitters = []
-		for submeasurement_name, path_to_submeasurement in Norberto.find_submeasurements_of_task('beta_scan_sweeping_bias_voltage').items():
+		for submeasurement_name, path_to_submeasurement in Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
+			Raúl = RunBureaucrat(path_to_submeasurement)
 			jitter_calculation_beta_scan(
-				path_to_measurement_base_directory = path_to_submeasurement,
+				bureaucrat = Raúl,
 				CFD_thresholds = CFD_thresholds,
 				force = force_calculation_on_submeasurements,
 			)
-			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='no_task', _locals=locals())
 			submeasurement_jitter = pandas.read_csv(
-				Raul.path_to_output_directory_of_task_named('jitter_calculation_beta_scan')/'jitter.csv',
+				Raúl.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.csv',
 				names = ['variable_name','value'],
 			)
 			submeasurement_jitter.set_index('variable_name', inplace=True)
@@ -439,7 +429,7 @@ def jitter_calculation_beta_scan_sweeping_voltage(path_to_measurement_base_direc
 		
 		jitter_df = pandas.DataFrame.from_records(jitters)
 		jitter_df.columns.rename('', inplace=True)
-		jitter_df.to_csv(Norberto.path_to_default_output_directory/'jitter_vs_bias_voltage.csv', index=False)
+		jitter_df.to_csv(Norbertos_employee.path_to_directory_of_my_task/'jitter_vs_bias_voltage.csv', index=False)
 		
 		fig = px.line(
 			jitter_df.sort_values('Bias voltage (V)'),
@@ -447,33 +437,29 @@ def jitter_calculation_beta_scan_sweeping_voltage(path_to_measurement_base_direc
 			y = 'Jitter (s)',
 			error_y = 'Jitter (s) error',
 			markers = True,
-			title = f'Jitter vs bias voltage<br><sup>Measurement: {Norberto.measurement_name}</sup>',
+			title = f'Jitter vs bias voltage<br><sup>Run: {Norberto.run_name}</sup>',
 		)
 		fig.write_html(
-			str(Norberto.path_to_default_output_directory/'jitter_vs_bias_voltage.html'),
+			str(Norbertos_employee.path_to_directory_of_my_task/'jitter_vs_bias_voltage.html'),
 			include_plotlyjs = 'cdn',
 		)
 
-def script_core(path_to_measurement_base_directory:Path, CFD_thresholds, force:bool=False):
-	Nestor = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'deleteme',
-		_locals = locals(),
-	)
-	if Nestor.task_was_applied_without_errors('beta_scan_sweeping_bias_voltage'):
+def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
+	Nestor = bureaucrat
+	if Nestor.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		jitter_calculation_beta_scan_sweeping_voltage(
-			path_to_measurement_base_directory = path_to_measurement_base_directory,
+			bureaucrat = Nestor,
 			CFD_thresholds = CFD_thresholds,
 			force_calculation_on_submeasurements = force,
 		)
-	elif Nestor.task_was_applied_without_errors('beta_scan'):
+	elif Nestor.was_task_run_successfully('beta_scan'):
 		jitter_calculation_beta_scan(
-			path_to_measurement_base_directory = path_to_measurement_base_directory,
+			bureaucrat = Nestor,
 			CFD_thresholds = CFD_thresholds,
 			force = force,
 		)
 	else:
-		raise RuntimeError(f'Cannot process {path_to_measurement_base_directory} becasue I cannot find any of my known scripts to have ended successfully.')
+		raise RuntimeError(f'Cannot process run {repr(Nestor.run_name)} becasue I cannot find any of my known scripts to have ended successfully.')
 
 if __name__ == '__main__':
 	import argparse
@@ -496,7 +482,7 @@ if __name__ == '__main__':
 	)
 	args = parser.parse_args()
 	script_core(
-		Path(args.directory), 
+		RunBureaucrat(Path(args.directory)),
 		CFD_thresholds = {'DUT': 20, 'reference_trigger': 20},
 		force = args.force,
 	)
