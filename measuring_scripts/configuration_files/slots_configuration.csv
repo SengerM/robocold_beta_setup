@@ -1,8 +1,8 @@
 slot_number,device_name,position_long_stage,position_short_stage,The_Castle_channel_number,caen_serial_number,caen_channel_number
 1,LTT4,382,211,6,139,3
-2,LTT8,3082,211,1,13398,3
+2,LTT8,3082,211,8,13398,3
 3,LTT11,5682,111,2,139,2
-4,LTT7,8382,111,-1,13398,2
-5,LTT9,11082,111,5,139,1
+4,LTT7,8382,111,1,13398,2
+5,LTT9,11082,111,5,13398,1
 6,LTT21,19100,111,3,139,0
 7,MS33,13700,177,4,13398,0

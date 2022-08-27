@@ -36,7 +36,7 @@ def do_IV_vs_when_plot(measured_data_df):
 	return IV_vs_when_plot
 
 Norbert = NamedTaskBureaucrat(
-	Path('/home/sengerm/measurements_data')/'20220816000000_Robocold_setup_test_run',
+	Path.home()/Path('cernbox/projects/LGAD_stability/measurements_data')/'20220816000000_Robocold_setup_test_run',
 	task_name = 'plot_standby_data',
 	_locals = locals(),
 )
