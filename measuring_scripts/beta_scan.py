@@ -281,7 +281,7 @@ def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_
 					software_triggers = [lambda x: True for v in bias_voltages]
 				for bias_voltage,software_trigger in zip(bias_voltages,software_triggers):
 					p = beta_scan(
-						beta_scan_sweeping_bias_voltage_task_bureaucrat.create_subrun(f'{the_setup.get_name_of_device_in_slot_number(slot_number)}_{int(bias_voltage)}V'),
+						beta_scan_sweeping_bias_voltage_task_bureaucrat.create_subrun(f'{John.run_name}_{int(bias_voltage)}V'),
 						name_to_access_to_the_setup = name_to_access_to_the_setup,
 						slot_number = slot_number,
 						n_triggers = n_triggers_per_voltage,
