@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
+from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from pathlib import Path
 import pandas
 import shutil
@@ -220,18 +220,18 @@ def script_core(path_to_measurement_base_directory:Path):
 	else:
 		raise RuntimeError(f'Dont know how to process measurement `{repr(John.measurement_name)}` located in {John.path_to_measurement_base_directory}.')
 
-def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(Ernesto:NamedTaskBureaucrat, df:pandas.DataFrame)->pandas.DataFrame:
+def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(bureaucrat:RunBureaucrat, df:pandas.DataFrame)->pandas.DataFrame:
 	"""If there was a "beta scan cleaning" performed on the measurement
-	being managed by `Ernesto`, it will be used to tag each row in `df`
-	as background or not background.
+	being managed by the `bureaucrat`, it will be used to tag each `n_trigger` 
+	in `df`	as background or not background.
 	Note that `df` must have `n_trigger` as an index in order for this
 	to be possible. If no successful "clean_beta_scan" task is found by
-	`Ernesto`, an error is raised.
+	`bureaucrat`, an error is raised.
 	
 	Arguments
 	---------
-	Ernesto: NamedTaskBureaucrat
-		A bureaucrat pointing to a measurement in which there was a "beta_scan", 
+	bureaucrat: RunBureaucrat
+		A bureaucrat pointing to a run in which there was a "beta_scan", 
 		and possibly (but not mandatory) a "clean_beta_scan".
 	df: pandas.DataFrame
 		The data frame you want to clean according to the "clean beta scan"
@@ -244,17 +244,15 @@ def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(Ernes
 		that tags with `True` or `False` each `n_trigger` value.
 	"""
 	
-	Ernesto.check_required_tasks_were_run_before(['beta_scan','clean_beta_scan'])
+	Ernesto = bureaucrat
+	
+	Ernesto.check_these_tasks_were_run_successfully(['beta_scan','clean_beta_scan'])
 	
 	if 'n_trigger' not in df.index.names:
 		raise ValueError(f'`"n_trigger"` cannot be found in the index of `df`. I need it in order to match to the results of the `clean_beta_scan` task.')
 	
-	shutil.copyfile( # Put a copy of the cuts in the output directory so there is a record of what was done.
-		Ernesto.path_to_output_directory_of_task_named('clean_beta_scan')/'cuts.backup.csv',
-		Ernesto.path_to_default_output_directory/'cuts_that_were_applied.csv',
-	)
 	df = df.merge(
-		right = pandas.read_feather(Ernesto.path_to_output_directory_of_task_named('clean_beta_scan')/'result.fd').set_index('n_trigger'),
+		right = pandas.read_feather(Ernesto.path_to_directory_of_task('clean_beta_scan')/'result.fd').set_index('n_trigger'),
 		left_index = True, 
 		right_index = True
 	)
