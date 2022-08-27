@@ -45,15 +45,15 @@ def apply_cuts(data_df, cuts_df):
 			raise ValueError('Received a cut of type `cut_type={}`, dont know that that is...'.format(cut_row['cut_type']))
 	return triggers_accepted_df
 
-def clean_beta_scan(path_to_measurement_base_directory:Path, path_to_cuts_file:Path=None)->Path:
+def clean_beta_scan(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None)->Path:
 	"""Clean the events from a beta scan, i.e. apply cuts to reject/accept 
 	the events. The output is a file assigning an "is_background" `True`
 	or `False` label to each trigger.
 	
 	Arguments
 	---------
-	path_to_measurement_base_directory: Path
-		Path to the directory of the measurement you want to clean.
+	bureaucrat: RunBureaucrat
+		The bureaucrat to handle this run.
 	path_to_cuts_file: Path, optional
 		Path to a CSV file specifying the cuts, an example of such file
 		is 
@@ -65,72 +65,60 @@ def clean_beta_scan(path_to_measurement_base_directory:Path, path_to_cuts_file:P
 		If nothing is passed, a file named `cuts.csv` will try to be found
 		in the measurement's base directory.
 	"""
-	John = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'clean_beta_scan',
-		_locals = locals(),
-	)
+	John = bureaucrat
 	
-	John.check_required_tasks_were_run_before('beta_scan')
+	John.check_these_tasks_were_run_successfully('beta_scan')
 	
 	if path_to_cuts_file is None:
-		path_to_cuts_file = John.path_to_measurement_base_directory/Path('cuts.csv')
+		path_to_cuts_file = John.path_to_run_directory/Path('cuts.csv')
 	elif not isinstance(path_to_cuts_file, Path):
 		raise TypeError(f'`path_to_cuts_file` must be an instance of {Path}, received object of type {type(path_to_cuts_file)}.')
 	cuts_df = pandas.read_csv(path_to_cuts_file)
-	data_df = load_whole_dataframe(John.path_to_output_directory_of_script_named('beta_scan.py')/Path('parsed_from_waveforms.sqlite'))
+	data_df = load_whole_dataframe(John.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 	
-	with John.do_your_magic():
-		cuts_df.to_csv(John.path_to_default_output_directory/Path(f'cuts.backup.csv'), index=False) # Create a backup.
+	with John.handle_task('clean_beta_scan') as task:
+		cuts_df.to_csv(task.path_to_directory_of_my_task/Path(f'cuts.backup.csv'), index=False) # Create a backup.
 		filtered_triggers_df = apply_cuts(data_df, cuts_df)
-		filtered_triggers_df.reset_index().to_feather(John.path_to_default_output_directory/Path('result.fd'))
+		filtered_triggers_df.reset_index().to_feather(task.path_to_directory_of_my_task/Path('result.fd'))
 
-def clean_beta_scan_submeasurements_using_the_same_cuts_for_all(path_to_measurement_base_directory:Path, path_to_cuts_file:Path=None):
+def clean_beta_scan_submeasurements_using_the_same_cuts_for_all(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None):
 	"""Clean all sub- beta scans using the same cuts."""
-	Eriberto = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'clean_beta_scan_submeasurements_using_the_same_cuts_for_all',
-		_locals = locals(),
-	)
-	Eriberto.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage')
+	Eriberto = bureaucrat
+	Eriberto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
 	if path_to_cuts_file is None: # Try to locate it within the measurement's base directory.
-		path_to_cuts_file = Eriberto.path_to_measurement_base_directory/'cuts.csv'
+		path_to_cuts_file = Eriberto.path_to_run_directory/'cuts.csv'
 	if not path_to_cuts_file.is_file():
 		raise FileNotFoundError(f'Cannot find file with the cuts in {path_to_cuts_file}.')
-	for submeasurement_name, path_to_submeasurement in Eriberto.find_submeasurements_of_task('beta_scan_sweeping_bias_voltage').items():
-		clean_beta_scan(path_to_submeasurement, path_to_cuts_file)
-		plot_beta_scan_after_cleaning(path_to_submeasurement)
+	for submeasurement_name, path_to_submeasurement in Eriberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
+		Quique = RunBureaucrat(path_to_submeasurement)
+		clean_beta_scan(Quique, path_to_cuts_file)
 
-def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path, scatter_plot:bool=True, langauss_plots:bool=True, distributions:bool=False):
+def clean_beta_scan_plots(bureaucrat:RunBureaucrat, scatter_plot:bool=True, langauss_plots:bool=True, distributions:bool=False):
 	COLOR_DISCRETE_MAP = {
 		True: '#ff5c5c',
 		False: '#27c200',
 	}
 	
-	John = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'plot_beta_scan_after_cleaning',
-		_locals = locals(),
-	)
+	John = bureaucrat
 	
-	John.check_required_tasks_were_run_before(['beta_scan','clean_beta_scan'])
+	John.check_these_tasks_were_run_successfully(['beta_scan','clean_beta_scan'])
 	
-	with John.do_your_magic():
-		df = load_whole_dataframe(John.path_to_output_directory_of_script_named('beta_scan.py')/Path('parsed_from_waveforms.sqlite'))
+	with John.handle_task('clean_beta_scan_plots') as Johns_eployee:
+		df = load_whole_dataframe(Johns_eployee.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 		
 		df = tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(John, df)
 		df = df.reset_index().sort_values('signal_name')
 		
 		if distributions:
-			path_to_save_plots = John.path_to_default_output_directory/'distributions'
+			path_to_save_plots = Johns_eployee.path_to_directory_of_my_task/'distributions'
 			path_to_save_plots.mkdir(exist_ok = True)
 			for col in df.columns:
 				if col in {'signal_name','n_trigger','is_background'}:
 					continue
 				fig = px.histogram(
 					df,
-					title = f'{col} histogram<br><sup>Measurement: {John.measurement_name}</sup>',
+					title = f'{col} histogram<br><sup>Run: {John.run_name}</sup>',
 					x = col,
 					facet_row = 'signal_name',
 					color = 'is_background',
@@ -143,7 +131,7 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path, scat
 				
 				fig = px.ecdf(
 					df,
-					title = f'{col} ECDF<br><sup>Measurement: {John.measurement_name}</sup>',
+					title = f'{col} ECDF<br><sup>Run: {John.run_name}</sup>',
 					x = col,
 					facet_row = 'signal_name',
 					color = 'is_background',
@@ -162,7 +150,7 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path, scat
 			fig = px.scatter_matrix(
 				df,
 				dimensions = sorted(columns_for_scatter_matrix_plot),
-				title = f'Scatter matrix plot<br><sup>Measurement: {John.measurement_name}</sup>',
+				title = f'Scatter matrix plot<br><sup>Run: {John.run_name}</sup>',
 				symbol = 'signal_name',
 				color = 'is_background',
 				hover_data = ['n_trigger'],
@@ -179,7 +167,7 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path, scat
 					),
 				)
 			fig.write_html(
-				str(John.path_to_default_output_directory/Path('scatter matrix plot.html')),
+				str(Johns_eployee.path_to_directory_of_my_task/Path('scatter matrix plot.html')),
 				include_plotlyjs = 'cdn',
 			)
 		
@@ -187,7 +175,7 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path, scat
 			for col in {'Amplitude (V)','Collected charge (V s)'}:
 				fig = go.Figure()
 				fig.update_layout(
-					title = f'Langauss fit to {col} after cleaning<br><sup>Measurement: {John.measurement_name}</sup>',
+					title = f'Langauss fit to {col} after cleaning<br><sup>Run: {John.run_name}</sup>',
 					xaxis_title = col,
 					yaxis_title = 'count',
 				)
@@ -201,24 +189,22 @@ def plot_beta_scan_after_cleaning(path_to_measurement_base_directory: Path, scat
 						line_color = next(colors),
 					)
 				fig.write_html(
-					str(John.path_to_default_output_directory/Path(f'langauss fit to {col}.html')),
+					str(Johns_eployee.path_to_directory_of_my_task/f'langauss fit to {col}.html'),
 					include_plotlyjs = 'cdn',
 				)
 
-def script_core(path_to_measurement_base_directory:Path):
-	John = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'deleteme_dummy',
-		_locals = locals(),
-	)
+def script_core(bureaucrat:RunBureaucrat):
+	John = bureaucrat
 	
-	if John.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage', raise_error=False):
-		clean_beta_scan_submeasurements_using_the_same_cuts_for_all(path_to_measurement_base_directory)
-	elif John.check_required_tasks_were_run_before('beta_scan', raise_error=False):
-		clean_beta_scan(path_to_measurement_base_directory)
-		plot_beta_scan_after_cleaning(path_to_measurement_base_directory)
+	if John.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage', raise_error=False):
+		clean_beta_scan_submeasurements_using_the_same_cuts_for_all(John)
+		for subrun_name, path_to_subrun in John.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
+			clean_beta_scan_plots(RunBureaucrat(path_to_subrun))
+	elif John.check_these_tasks_were_run_successfully('beta_scan', raise_error=False):
+		clean_beta_scan(John)
+		clean_beta_scan_plots(John)
 	else:
-		raise RuntimeError(f'Dont know how to process measurement `{repr(John.measurement_name)}` located in {John.path_to_measurement_base_directory}.')
+		raise RuntimeError(f'Dont know how to process run {repr(John.run_name)} located in {John.path_to_run_directory}.')
 
 def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(bureaucrat:RunBureaucrat, df:pandas.DataFrame)->pandas.DataFrame:
 	"""If there was a "beta scan cleaning" performed on the measurement
@@ -271,4 +257,4 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	script_core(Path(args.directory))
+	script_core(RunBureaucrat(Path(args.directory)))
