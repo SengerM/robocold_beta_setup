@@ -309,7 +309,7 @@ if __name__=='__main__':
 	
 	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
 	
-	BIAS_VOLTAGES = numpy.linspace(150,300,8)
+	BIAS_VOLTAGES = [170,180,190,194]
 	
 	# ------------------------------------------------------------------
 	
@@ -319,9 +319,9 @@ if __name__=='__main__':
 		beta_scan_sweeping_bias_voltage(
 			bureaucrat = John,
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
-			slot_number = 1,
-			n_triggers_per_voltage = 22,
+			slot_number = 7,
+			n_triggers_per_voltage = 111,
 			bias_voltages = BIAS_VOLTAGES,
 			silent = False,
-			software_triggers = [lambda x,A=0: software_trigger(x, A) for V in BIAS_VOLTAGES],
+			software_triggers = [lambda x,A=A: software_trigger(x, A) for A in [.03,.05,.1,.1]],
 		)
