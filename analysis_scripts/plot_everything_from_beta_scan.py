@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
+from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from pathlib import Path
 import pandas
 import plotly.graph_objects as go
@@ -116,28 +116,24 @@ def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, 
 			align = 'right',
 		)
 
-def plot_everything_from_beta_scan(path_to_measurement: Path):
-	John = NamedTaskBureaucrat(
-		path_to_measurement,
-		task_name = 'plot_everything_from_beta_scan',
-		_locals = locals(),
-	)
+def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat):
+	John = bureaucrat
 	
-	John.check_required_scripts_were_run_before('beta_scan.py')
+	John.check_these_tasks_were_run_successfully('beta_scan')
 	
-	measured_stuff_df = load_whole_dataframe(John.path_to_output_directory_of_script_named('beta_scan.py')/Path('measured_stuff.sqlite'))
-	parsed_from_waveforms_df = load_whole_dataframe(John.path_to_output_directory_of_script_named('beta_scan.py')/Path('parsed_from_waveforms.sqlite'))
+	measured_stuff_df = load_whole_dataframe(John.path_to_directory_of_task('beta_scan')/Path('measured_stuff.sqlite'))
+	parsed_from_waveforms_df = load_whole_dataframe(John.path_to_directory_of_task('beta_scan')/Path('parsed_from_waveforms.sqlite'))
 	
-	with John.do_your_magic():
+	with John.handle_task('plot_everything_from_beta_scan') as task_bureaucrat:
 		df = measured_stuff_df.sort_values('When').reset_index()
-		path_to_save_plots = John.path_to_default_output_directory/Path('measured_stuff_vs_time')
+		path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('measured_stuff_vs_time')
 		path_to_save_plots.mkdir()
 		for col in measured_stuff_df.columns:
 			if col in {'device_name','When','n_trigger'}:
 				continue
 			fig = px.line(
 				df,
-				title = f'{col} vs time<br><sup>Measurement: {John.measurement_name}</sup>',
+				title = f'{col} vs time<br><sup>Run: {John.run_name}</sup>',
 				x = 'When',
 				y = col,
 				color = 'device_name',
@@ -149,14 +145,14 @@ def plot_everything_from_beta_scan(path_to_measurement: Path):
 			)
 		
 		df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
-		path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
+		path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms')
 		path_to_save_plots.mkdir()
 		for col in df.columns:
 			if col in {'signal_name','n_trigger'}:
 				continue
 			fig = px.histogram(
 				df,
-				title = f'{col} histogram<br><sup>Measurement: {John.measurement_name}</sup>',
+				title = f'{col} histogram<br><sup>Run: {John.run_name}</sup>',
 				x = col,
 				facet_row = 'signal_name',
 			)
@@ -167,7 +163,7 @@ def plot_everything_from_beta_scan(path_to_measurement: Path):
 			
 			fig = px.ecdf(
 				df,
-				title = f'{col} ECDF<br><sup>Measurement: {John.measurement_name}</sup>',
+				title = f'{col} ECDF<br><sup>Run: {John.run_name}</sup>',
 				x = col,
 				facet_row = 'signal_name',
 			)
@@ -183,7 +179,7 @@ def plot_everything_from_beta_scan(path_to_measurement: Path):
 			fig = px.scatter_matrix(
 				df,
 				dimensions = sorted(columns_for_scatter_matrix_plot),
-				title = f'Scatter matrix plot<br><sup>Measurement: {John.measurement_name}</sup>',
+				title = f'Scatter matrix plot<br><sup>Run: {John.run_name}</sup>',
 				color = 'signal_name',
 				hover_data = ['n_trigger'],
 			)
@@ -202,12 +198,12 @@ def plot_everything_from_beta_scan(path_to_measurement: Path):
 				include_plotlyjs = 'cdn',
 			)
 		
-		path_to_save_plots = John.path_to_default_output_directory/Path('parsed_from_waveforms')
+		path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms')
 		path_to_save_plots.mkdir(exist_ok=True)
 		for col in {'Amplitude (V)','Collected charge (V s)'}:
 			fig = go.Figure()
 			fig.update_layout(
-				title = f'Langauss fit to {col}<br><sup>Measurement: {John.measurement_name}</sup>',
+				title = f'Langauss fit to {col}<br><sup>Run: {John.run_name}</sup>',
 				xaxis_title = col,
 				yaxis_title = 'count',
 			)
@@ -239,15 +235,11 @@ if __name__ == '__main__':
 	
 	args = parser.parse_args()
 	
-	Enrique = NamedTaskBureaucrat(
-		Path(args.directory),
-		task_name = 'deleteme',
-		_locals = locals(),
-	)
+	Enrique = RunBureaucrat(Path(args.directory))
 	
-	if Enrique.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage', raise_error=False):
-		for measurement_name, path_to_measurement in Enrique.find_submeasurements_of_task('beta_scan_sweeping_bias_voltage').items():
+	if Enrique.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage', raise_error=False):
+		for measurement_name, path_to_measurement in Enrique.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
 			print(f'Processing {measurement_name}...')
-			plot_everything_from_beta_scan(path_to_measurement)
+			plot_everything_from_beta_scan(RunBureaucrat(path_to_measurement))
 	else:
-		plot_everything_from_beta_scan(Path(args.directory))
+		plot_everything_from_beta_scan(Enrique)
