@@ -46,57 +46,64 @@ def script_core(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, silen
 	
 	keep_threads_alive = True
 	def monitor_one_slot(slot_number:int):
-		while keep_threads_alive:
-			try:
-				standby_configuration = pandas.read_csv(Path(__file__).resolve().parent/Path('configuration_files/standby_configuration.csv'), index_col='slot_number', dtype={'slot_number': int, 'Bias voltage (V)': float, 'Current compliance (A)': float, 'Measure once every (s)': float}).loc[slot_number]
-			except FileNotFoundError as e:
-				warnings.warn(f'Cannot read standby configuration file, reason: `{e}`. Will ignore this and try again.')
-				time.sleep(THREADS_SLEEPING_SECONDS)
-				continue
-			if 'last_time_I_measured' not in locals(): # Initialize
-				# First I force a point with all `NaN` values, so then when I do a plot they are not connected with a line. It also indicates that the script was stopped during this period.
-				measured_data = measured_data = measure_data(
-					slot_number = slot_number, 
-					average_at_least_during_seconds = 11,
-					average_at_least_n_samples = 11,
-				)
-				for key in measured_data:
-					if key in {'device_name','When'}:
-						continue
-					measured_data[key] = float('NaN')
-				measured_data_df = pandas.DataFrame(
-					measured_data,
-					index = [0],
-				)
-				measured_data_df.set_index('device_name', inplace=True)
-				with data_to_dump_Lock:
-					data_to_dump.append(measured_data_df)
-				last_time_I_measured = datetime.datetime(year=1,month=1,day=1) # This will trigger a measure in the next iteration.
-			elif (datetime.datetime.now()-last_time_I_measured).seconds > standby_configuration['Measure once every (s)']:
-				if the_setup.is_bias_slot_number_being_hold_by_someone(slot_number):
+		thread_reporter = TelegramReporter(
+			telegram_token = my_telegram_bots.robobot.token,
+			telegram_chat_id = my_telegram_bots.chat_ids['Long term tests setup'],
+		)
+		try:
+			while keep_threads_alive:
+				try:
+					standby_configuration = pandas.read_csv(Path(__file__).resolve().parent/Path('configuration_files/standby_configuration.csv'), index_col='slot_number', dtype={'slot_number': int, 'Bias voltage (V)': float, 'Current compliance (A)': float, 'Measure once every (s)': float}).loc[slot_number]
+				except FileNotFoundError as e:
+					warnings.warn(f'Cannot read standby configuration file, reason: `{e}`. Will ignore this and try again.')
+					time.sleep(THREADS_SLEEPING_SECONDS)
+					continue
+				if 'last_time_I_measured' not in locals(): # Initialize
+					# First I force a point with all `NaN` values, so then when I do a plot they are not connected with a line. It also indicates that the script was stopped during this period.
 					measured_data = measured_data = measure_data(
 						slot_number = slot_number, 
 						average_at_least_during_seconds = 11,
 						average_at_least_n_samples = 11,
 					)
-				else:
-					with the_setup.hold_control_of_bias_for_slot_number(slot_number = slot_number, who = name_to_access_to_the_setup):
-						the_setup.set_current_compliance(slot_number=slot_number, amperes=standby_configuration['Current compliance (A)'], who=name_to_access_to_the_setup)
-						the_setup.set_bias_voltage(slot_number=slot_number, volts=standby_configuration['Bias voltage (V)'], who=name_to_access_to_the_setup)
-						measured_data = measure_data(
+					for key in measured_data:
+						if key in {'device_name','When'}:
+							continue
+						measured_data[key] = float('NaN')
+					measured_data_df = pandas.DataFrame(
+						measured_data,
+						index = [0],
+					)
+					measured_data_df.set_index('device_name', inplace=True)
+					with data_to_dump_Lock:
+						data_to_dump.append(measured_data_df)
+					last_time_I_measured = datetime.datetime(year=1,month=1,day=1) # This will trigger a measure in the next iteration.
+				elif (datetime.datetime.now()-last_time_I_measured).seconds > standby_configuration['Measure once every (s)']:
+					if the_setup.is_bias_slot_number_being_hold_by_someone(slot_number):
+						measured_data = measured_data = measure_data(
 							slot_number = slot_number, 
 							average_at_least_during_seconds = 11,
 							average_at_least_n_samples = 11,
 						)
-				last_time_I_measured = measured_data['When']
-				measured_data_df = pandas.DataFrame(
-					measured_data,
-					index = [0],
-				)
-				measured_data_df.set_index('device_name', inplace=True)
-				with data_to_dump_Lock:
-					data_to_dump.append(measured_data_df)
-			time.sleep(THREADS_SLEEPING_SECONDS)
+					else:
+						with the_setup.hold_control_of_bias_for_slot_number(slot_number = slot_number, who = name_to_access_to_the_setup):
+							the_setup.set_current_compliance(slot_number=slot_number, amperes=standby_configuration['Current compliance (A)'], who=name_to_access_to_the_setup)
+							the_setup.set_bias_voltage(slot_number=slot_number, volts=standby_configuration['Bias voltage (V)'], who=name_to_access_to_the_setup)
+							measured_data = measure_data(
+								slot_number = slot_number, 
+								average_at_least_during_seconds = 11,
+								average_at_least_n_samples = 11,
+							)
+					last_time_I_measured = measured_data['When']
+					measured_data_df = pandas.DataFrame(
+						measured_data,
+						index = [0],
+					)
+					measured_data_df.set_index('device_name', inplace=True)
+					with data_to_dump_Lock:
+						data_to_dump.append(measured_data_df)
+				time.sleep(THREADS_SLEEPING_SECONDS)
+		except Exception as e:
+			thread_reporter.send_message(f'🔥 Thred in slot number {slot_number} has just crashed, reason: {e}.')
 	
 	reporter = TelegramReporter(
 		telegram_token = my_telegram_bots.robobot.token,
