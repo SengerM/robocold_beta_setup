@@ -87,6 +87,7 @@ def plot_IV_curves_all_together(bureaucrat:RunBureaucrat):
 			color = 'device_name',
 			markers = True,
 			title = f'IV curves<br><sup>Measurement: {Richard.run_name}</sup>',
+			hover_data = ['n_voltage'],
 		)
 		fig.update_traces(
 			error_y = dict(
