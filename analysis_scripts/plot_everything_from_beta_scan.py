@@ -116,7 +116,7 @@ def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, 
 			align = 'right',
 		)
 
-def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat):
+def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False):
 	John = bureaucrat
 	
 	John.check_these_tasks_were_run_successfully('beta_scan')
@@ -125,24 +125,25 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat):
 	parsed_from_waveforms_df = load_whole_dataframe(John.path_to_directory_of_task('beta_scan')/Path('parsed_from_waveforms.sqlite'))
 	
 	with John.handle_task('plot_everything_from_beta_scan') as task_bureaucrat:
-		df = measured_stuff_df.sort_values('When').reset_index()
-		path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('measured_stuff_vs_time')
-		path_to_save_plots.mkdir()
-		for col in measured_stuff_df.columns:
-			if col in {'device_name','When','n_trigger'}:
-				continue
-			fig = px.line(
-				df,
-				title = f'{col} vs time<br><sup>Run: {John.run_name}</sup>',
-				x = 'When',
-				y = col,
-				color = 'device_name',
-				markers = True,
-			)
-			fig.write_html(
-				str(path_to_save_plots/Path(f'{col} vs time.html')),
-				include_plotlyjs = 'cdn',
-			)
+		if measured_stuff_vs_when:
+			df = measured_stuff_df.sort_values('When').reset_index()
+			path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('measured_stuff_vs_time')
+			path_to_save_plots.mkdir()
+			for col in measured_stuff_df.columns:
+				if col in {'device_name','When','n_trigger'}:
+					continue
+				fig = px.line(
+					df,
+					title = f'{col} vs time<br><sup>Run: {John.run_name}</sup>',
+					x = 'When',
+					y = col,
+					color = 'device_name',
+					markers = True,
+				)
+				fig.write_html(
+					str(path_to_save_plots/Path(f'{col} vs time.html')),
+					include_plotlyjs = 'cdn',
+				)
 		
 		df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
 		path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms')
@@ -150,6 +151,9 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat):
 		for col in df.columns:
 			if col in {'signal_name','n_trigger'}:
 				continue
+			if not all_distributions:
+				if col not in {'Amplitude (V)','Collected charge (V s)','SNR','Noise (V)'}:
+					continue
 			fig = px.histogram(
 				df,
 				title = f'{col} histogram<br><sup>Run: {John.run_name}</sup>',
