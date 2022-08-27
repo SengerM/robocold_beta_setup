@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
+from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import plotly.express as px
 import plotly.graph_objects as go
@@ -35,18 +35,30 @@ def do_IV_vs_when_plot(measured_data_df):
 			)
 	return IV_vs_when_plot
 
-Norbert = NamedTaskBureaucrat(
-	Path.home()/Path('cernbox/projects/LGAD_stability/measurements_data')/'20220816000000_Robocold_setup_test_run',
-	task_name = 'plot_standby_data',
-	_locals = locals(),
-)
+def plot_monitored_data(bureaucrat:RunBureaucrat):
+	Norbert = bureaucrat
+	# ~ Norbert.check_these_tasks_were_run_successfully('detectors_monitoring') # This cannot be checked because this task is continuously ongoing...
+	with Norbert.handle_task('plot_monitored_data') as Norberts_employee:
+		measured_data_df = load_whole_dataframe(Norberts_employee.path_to_directory_of_task('detectors_monitoring')/'measured_data.sqlite')
+		measured_data_df['Bias voltage (V)'] *= -1
+		
+		fig = do_IV_vs_when_plot(measured_data_df)
+		fig.write_html(
+			str(Norberts_employee.path_to_directory_of_my_task/'bias_voltage_and_current.html'),
+			include_plotlyjs = 'cdn',
+		)
 
-with Norbert.do_your_magic():
-	measured_data_df = load_whole_dataframe(Norbert.path_to_output_directory_of_task_named('monitor_standby_conditions')/'measured_data.sqlite')
-	measured_data_df['Bias voltage (V)'] *= -1
-	
-	fig = do_IV_vs_when_plot(measured_data_df)
-	fig.write_html(
-		str(Norbert.path_to_default_output_directory/'bias_voltage_and_current.html'),
-		include_plotlyjs = 'cdn',
+if __name__=='__main__':
+	import argparse
+
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--dir',
+		metavar = 'path',
+		help = 'Path to the base measurement directory.',
+		required = True,
+		dest = 'directory',
+		type = str,
 	)
+
+	args = parser.parse_args()
+	plot_monitored_data(RunBureaucrat(Path(args.directory)))

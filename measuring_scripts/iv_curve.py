@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
+from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from pathlib import Path
 import pandas
 import datetime
@@ -11,14 +11,12 @@ from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dat
 import threading
 import warnings
 
-def measure_iv_curve(path_to_directory_in_which_to_place_the_new_measurement:Path, measurement_name:str, voltages:list, slot_number:int, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent=False)->Path:
+def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent=False)->Path:
 	"""Measure an IV curve.
 	Parameters
 	----------
-	path_to_directory_in_which_to_store_data: Path
-		Path to the directory where to store the data.
-	measurement_name: str
-		A name for the measurement.
+	bureaucrat: RunBureaucrat
+		The `RunBureaucrat` object that will manage this measurement.
 	n_measurements_per_voltage: int
 		Number of measurements to perform at each voltage.
 	voltages: list of float
@@ -38,12 +36,8 @@ def measure_iv_curve(path_to_directory_in_which_to_place_the_new_measurement:Pat
 		A path to the directory where the measurement's data was stored.
 	"""
 	
-	John = NamedTaskBureaucrat(
-		path_to_directory_in_which_to_place_the_new_measurement/Path(measurement_name),
-		task_name = 'measure_iv_curve',
-		new_measurement = True,
-		_locals = locals(),
-	)
+	John = bureaucrat
+	John.create_run()
 	
 	the_setup = connect_me_with_the_setup()
 	
@@ -52,14 +46,14 @@ def measure_iv_curve(path_to_directory_in_which_to_place_the_new_measurement:Pat
 	with the_setup.hold_control_of_bias_for_slot_number(slot_number=slot_number, who=name_to_access_to_the_setup):
 		if not silent:
 			print('Control of hardware acquired.')
-		with John.do_your_magic():
-			with open(John.path_to_default_output_directory/'setup_description.txt','w') as ofile:
+		with John.handle_task('measure_iv_curve') as measure_iv_curve_task_handler:
+			with open(measure_iv_curve_task_handler.path_to_directory_of_my_task/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
-			with SQLiteDataFrameDumper(John.path_to_default_output_directory/Path('measured_data.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=10) as measured_data_dumper:
+			with SQLiteDataFrameDumper(measure_iv_curve_task_handler.path_to_directory_of_my_task/Path('measured_data.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=10) as measured_data_dumper:
 				the_setup.set_current_compliance(slot_number=slot_number, amperes=current_compliance, who=name_to_access_to_the_setup)
 				for n_voltage,voltage in enumerate(voltages):
 					if not silent:
-						print(f'Measuring n_voltage={n_voltage}/{len(voltages)-1}...')
+						print(f'Measuring n_voltage={n_voltage}/{len(voltages)-1} on slot {slot_number}...')
 					try:
 						the_setup.set_bias_voltage(slot_number, voltage, who=name_to_access_to_the_setup)
 					except Exception as e:
@@ -91,10 +85,12 @@ def measure_iv_curve(path_to_directory_in_which_to_place_the_new_measurement:Pat
 						measured_data_dumper.append(measured_data_df)
 						time.sleep(.5)
 	if not silent:
-		print(f'Finished measuring IV curve...')
-	
+		print(f'Finished measuring IV curve on slot {slot_number}...')
+
+def plot_iv_curve(bureaucrat:RunBureaucrat):
+	raise NotImplementedError()
 	# Finished, now do a plot ---
-	measured_data_df = load_whole_dataframe(John.path_to_default_output_directory/Path('measured_data.sqlite'))
+	measured_data_df = load_whole_dataframe(John.path_to_directory_of_task('measure_iv_curve')/Path('measured_data.sqlite'))
 	measured_data_df.reset_index(inplace=True)
 	measured_data_df['Bias voltage (V)'] *= -1
 	fig = px.line(
@@ -141,15 +137,13 @@ def measure_iv_curve(path_to_directory_in_which_to_place_the_new_measurement:Pat
 
 	return John.path_to_measurement_base_directory
 
-def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_place_the_new_measurement:Path, measurement_name:str, voltages:dict, current_compliances:dict, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, silent:bool=False)->Path:
+def measure_iv_curves_on_multiple_slots(bureaucrat:RunBureaucrat, voltages:dict, current_compliances:dict, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, silent:bool=False)->Path:
 	"""Measure the IV curve of multiple slots.
 	
 	Parameters
 	----------
-	path_to_directory_in_which_to_store_data: Path
-		Path to the directory where to store the data.
-	measurement_name: str
-		A name for the measurement.
+	bureaucrat: RunBureaucrat
+		The bureaucrat that will manage this measurement.
 	name_to_access_to_the_setup: str
 		The name to use when accessing to the setup.
 	n_measurements_per_voltage: int
@@ -162,28 +156,21 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_place_the_new_
 		specifying the current compliance for each slot.
 	silent: bool, default False
 		If `True`, no progress messages are printed.
-	
-	Returns
-	-------
-	path_to_measurement_base_directory: Path
-		A path to the directory where the measurement's data was stored.
 	"""
 	
 	class MeasureIVCurveThread(threading.Thread):
-		def __init__(self, name:str, slot_number:int, voltages_to_measure:list, n_measurements_per_voltage:int, directory_to_store_data:Path, name_to_access_to_the_setup:str, current_compliance:float, silent:bool):
+		def __init__(self, bureaucrat:RunBureaucrat, slot_number:int, voltages_to_measure:list, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent:bool):
 			threading.Thread.__init__(self)
-			self.name = name
+			self.bureaucrat = bureaucrat
 			self.slot_number = slot_number
 			self.name_to_access_to_the_setup = name_to_access_to_the_setup
 			self.voltages_to_measure = voltages_to_measure
 			self.n_measurements_per_voltage = n_measurements_per_voltage
-			self.directory_to_store_data = directory_to_store_data
 			self.current_compliance = current_compliance
 			self.silent = silent
 		def run(self):
 			measure_iv_curve(
-				path_to_directory_in_which_to_place_the_new_measurement = self.directory_to_store_data,
-				measurement_name = f'IV_curve_{the_setup.get_name_of_device_in_slot_number(self.slot_number)}',
+				bureaucrat = self.bureaucrat,
 				name_to_access_to_the_setup = name_to_access_to_the_setup,
 				voltages = self.voltages_to_measure, 
 				slot_number = self.slot_number, 
@@ -192,12 +179,8 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_place_the_new_
 				silent = self.silent,
 			)
 	
-	Richard = NamedTaskBureaucrat(
-		path_to_directory_in_which_to_place_the_new_measurement/Path(measurement_name),
-		task_name = 'measure_iv_curve_multiple_slots',
-		new_measurement = True,
-		_locals = locals(),
-	)
+	Richard = bureaucrat
+	Richard.create_run()
 	
 	if any([not isinstance(_, dict) for _ in [voltages, current_compliances]]):
 		raise TypeError(f'`voltages` and `current_compliances` must be dictionaries, but at least one of them is not...')
@@ -206,22 +189,21 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_place_the_new_
 	
 	the_setup = connect_me_with_the_setup()
 	
-	threads = []
-	for slot_number in set(voltages):
-		thread = MeasureIVCurveThread(
-			name = f'IV measuring thread for slot {slot_number}',
-			slot_number = slot_number,
-			name_to_access_to_the_setup = name_to_access_to_the_setup,
-			voltages_to_measure = voltages[slot_number],
-			n_measurements_per_voltage = n_measurements_per_voltage,
-			directory_to_store_data = Richard.path_to_submeasurements_directory,
-			current_compliance = current_compliances[slot_number],
-			silent = silent,
-		)
-		threads.append(thread)
+	with Richard.handle_task('measure_iv_curves_on_multiple_slots') as measure_iv_curves_on_multiple_slots_task_handler:
+		threads = []
+		for slot_number in set(voltages):
+			thread = MeasureIVCurveThread(
+				bureaucrat = measure_iv_curves_on_multiple_slots_task_handler.create_subrun(subrun_name=f'IV_curve_{the_setup.get_name_of_device_in_slot_number(slot_number)}'),
+				slot_number = slot_number,
+				name_to_access_to_the_setup = name_to_access_to_the_setup,
+				voltages_to_measure = voltages[slot_number],
+				n_measurements_per_voltage = n_measurements_per_voltage,
+				current_compliance = current_compliances[slot_number],
+				silent = silent,
+			)
+			threads.append(thread)
 	
-	with Richard.do_your_magic():
-		with open(Richard.path_to_default_output_directory/Path('setup_description.txt'), 'w') as ofile:
+		with open(measure_iv_curves_on_multiple_slots_task_handler.path_to_directory_of_my_task/Path('setup_description.txt'), 'w') as ofile:
 			print(the_setup.get_description(), file=ofile)
 		
 		if not silent:
@@ -242,39 +224,19 @@ def measure_iv_curve_multiple_slots(path_to_directory_in_which_to_place_the_new_
 		if not silent:
 			print(f'Finished measuring all IV curves.')
 	
-	return Richard.path_to_measurement_base_directory
-
-def plot_IV_curves_all_together(path_to_directory_in_which_to_find_the_measurement:Path, measurement_name:str):
-	"""Do a plot of the IV curves measured previously all together.
+def plot_IV_curves_all_together(bureaucrat:RunBureaucrat):
+	"""Do a plot of the IV curves measured previously all together."""
+	Richard = bureaucrat
 	
-	Parameters
-	----------
-	path_to_directory_in_which_to_store_data: Path
-		Path to the directory where to find the measurement.
-	measurement_name: str
-		Name of the measurement to plot.
-	"""
-	Richard = NamedTaskBureaucrat(
-		path_to_directory_in_which_to_find_the_measurement/measurement_name,
-		task_name = 'plot_IV_curves_all_together',
-		_locals = locals(),
-	)
+	Richard.check_these_tasks_were_run_successfully('measure_iv_curves_on_multiple_slots')
 	
-	Richard.check_required_tasks_were_run_before('measure_iv_curve_multiple_slots')
-	
-	with Richard.do_your_magic():
+	with Richard.handle_task('plot_IV_curves_all_together') as plot_IV_curves_all_together_task_handler:
 		measured_data_list = []
-		for submeasurement_name, path_to_submeasurement in Richard.find_submeasurements_of_task('measure_iv_curve_multiple_slots').items():
-			Felipe = NamedTaskBureaucrat(
-				path_to_submeasurement,
-				task_name = 'dummy',
-				_locals = locals(),
-			)
-			Felipe.check_required_tasks_were_run_before('measure_iv_curve')
+		for subrun_name, path_to_subrun in Richard.list_subruns_of_task('measure_iv_curves_on_multiple_slots').items():
+			Felipe = RunBureaucrat(path_to_subrun)
+			Felipe.check_these_tasks_were_run_successfully('measure_iv_curve')
 			measured_data_list.append(
-				load_whole_dataframe(
-					Felipe.path_to_output_directory_of_task_named('measure_iv_curve')/Path('measured_data.sqlite')
-				).reset_index(),
+				load_whole_dataframe(Felipe.path_to_directory_of_task('measure_iv_curve')/'measured_data.sqlite').reset_index(),
 			)
 		measured_data_df = pandas.concat(measured_data_list, ignore_index=True)
 		measured_data_df['Bias voltage (V)'] *= -1
@@ -292,7 +254,7 @@ def plot_IV_curves_all_together(path_to_directory_in_which_to_find_the_measureme
 			error_x = 'Bias voltage (V) error',
 			color = 'device_name',
 			markers = True,
-			title = f'IV curves<br><sup>Measurement: {Richard.measurement_name}</sup>',
+			title = f'IV curves<br><sup>Measurement: {Richard.run_name}</sup>',
 		)
 		fig.update_traces(
 			error_y = dict(
@@ -301,40 +263,31 @@ def plot_IV_curves_all_together(path_to_directory_in_which_to_find_the_measureme
 			)
 		)
 		fig.write_html(
-			str(Richard.path_to_default_output_directory/Path('iv_curves.html')),
+			str(plot_IV_curves_all_together_task_handler.path_to_directory_of_my_task/Path('iv_curves.html')),
 			include_plotlyjs = 'cdn',
 		)
 
 if __name__=='__main__':
 	import numpy
 	import os
-	from configuration_files.current_run import CURRENT_RUN_NAME
+	from configuration_files.current_run import Alberto
+	from utils import create_a_timestamp
 	
 	SLOTS = [1,2,3,4,5,6,7]
-	VOLTAGE_VALUES = list(numpy.linspace(0,777,555))
+	VOLTAGE_VALUES = list(numpy.linspace(0,777,111))
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = {slot: 10e-6 for slot in SLOTS}
 	NAME_TO_ACCESS_TO_THE_SETUP = f'IV curves measurement script PID: {os.getpid()}'
 	
-	John = NamedTaskBureaucrat(
-		Path.home()/Path('measurements_data')/CURRENT_RUN_NAME,
-		task_name = 'iv_curves',
-		_locals = locals(),
-	)
-	
-	with John.do_your_magic(clean_default_output_directory = False):
-		John.path_to_submeasurements_directory.mkdir(exist_ok=True)
-		p = measure_iv_curve_multiple_slots(
-			path_to_directory_in_which_to_place_the_new_measurement = John.path_to_submeasurements_directory,
-			measurement_name = input('Measurement name? ').replace(' ','_'),
+	with Alberto.handle_task('iv_curves', drop_old_data=False) as iv_curves_task_bureaucrat:
+		Mariano = iv_curves_task_bureaucrat.create_subrun(create_a_timestamp() + '_' + input('Measurement name? ').replace(' ','_'))
+		measure_iv_curves_on_multiple_slots(
+			bureaucrat = Mariano,
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 			voltages = VOLTAGES_FOR_EACH_SLOT,
 			current_compliances = CURRENT_COMPLIANCES,
 			n_measurements_per_voltage = 11,
 			silent = False,
 		)
-		plot_IV_curves_all_together(
-			path_to_directory_in_which_to_find_the_measurement = p.parent,
-			measurement_name = p.parts[-1],
-		)
+		plot_IV_curves_all_together(Mariano)

@@ -1,4 +1,4 @@
-from bureaucrat.SmarterBureaucrat import NamedTaskBureaucrat # https://github.com/SengerM/bureaucrat
+from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from pathlib import Path
 import pandas
 import plotly.express as px
@@ -36,22 +36,21 @@ def draw_langauss_fit(fig, popt, x_values:numpy.array, color:str, name:str, norm
 		)
 	)
 
-def collected_charge_in_beta_scan(path_to_measurement_base_directory:Path, force:bool=False):
-	Norberto = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'collected_charge_in_beta_scan',
-		_locals = locals(),
-	)
+def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
+	Norberto = bureaucrat
 	
-	Norberto.check_required_tasks_were_run_before('beta_scan')
+	Norberto.check_these_tasks_were_run_successfully('beta_scan')
 	
-	if force == False and Norberto.task_was_applied_without_errors(): # If this was already done, don't do it again...
+	TASK_NAME = 'collected_charge_in_beta_scan'
+	
+	if force == False and Norberto.was_task_run_successfully(TASK_NAME): # If this was already done, don't do it again...
 		return
 	
-	data_df = load_whole_dataframe(Norberto.path_to_output_directory_of_script_named('beta_scan.py')/Path('parsed_from_waveforms.sqlite'))
+	data_df = load_whole_dataframe(Norberto.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 	
-	with Norberto.do_your_magic():
-		data_df = tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(Norberto, data_df).query('is_background==False').drop(columns='is_background')
+	with Norberto.handle_task(TASK_NAME) as task_handler:
+		if Norberto.was_task_run_successfully('clean_beta_scan'):
+			data_df = tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(Norberto, data_df).query('is_background==False').drop(columns='is_background')
 		
 		collected_charge_results = []
 		for n_bootstrap in range(N_BOOTSTRAP):
@@ -99,7 +98,7 @@ def collected_charge_in_beta_scan(path_to_measurement_base_directory:Path, force
 				# Do some plotting...
 				fig = go.Figure()
 				fig.update_layout(
-					title = f'Collected charge Langauss fit<br><sup>Measurement: {Norberto.measurement_name}</sup>',
+					title = f'Collected charge Langauss fit<br><sup>Run: {Norberto.run_name}</sup>',
 					xaxis_title = 'Collected charge (V s)',
 					yaxis_title = 'count',
 				)
@@ -127,7 +126,7 @@ def collected_charge_in_beta_scan(path_to_measurement_base_directory:Path, force
 					)
 				
 				fig.write_html(
-					str(Norberto.path_to_default_output_directory/'collected_charge_langauss_fit.html'),
+					str(task_handler.path_to_directory_of_my_task/'collected_charge_langauss_fit.html'),
 					include_plotlyjs = 'cdn',
 				)
 		
@@ -142,32 +141,28 @@ def collected_charge_in_beta_scan(path_to_measurement_base_directory:Path, force
 				}
 			)
 		collected_charge_final_results_df = pandas.DataFrame(collected_charge_final_results).set_index('signal_name')
-		collected_charge_final_results_df.to_csv(Norberto.path_to_default_output_directory/'collected_charge.csv')
+		collected_charge_final_results_df.to_csv(task_handler.path_to_directory_of_my_task/'collected_charge.csv')
 
-def collected_charge_vs_bias_voltage(path_to_measurement_base_directory:Path, force_calculation_on_submeasurements:bool=False):
-	Romina = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'collected_charge_vs_bias_voltage',
-		_locals = locals(),
-	)
+def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeasurements:bool=False):
+	Romina = bureaucrat
 	
-	Romina.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage')
-	with Romina.do_your_magic():
+	Romina.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	with Romina.handle_task('collected_charge_vs_bias_voltage') as task_handler:
 		collected_charges = []
-		for submeasurement_name, path_to_submeasurement in Romina.find_submeasurements_of_task('beta_scan_sweeping_bias_voltage').items():
+		for submeasurement_name, path_to_submeasurement in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
+			Raúl = RunBureaucrat(path_to_submeasurement)
 			collected_charge_in_beta_scan(
-				path_to_measurement_base_directory = path_to_submeasurement,
+				bureaucrat = Raúl,
 				force = force_calculation_on_submeasurements,
 			)
-			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='no_task', _locals=locals())
-			submeasurement_charge = pandas.read_csv(Raul.path_to_output_directory_of_task_named('collected_charge_in_beta_scan')/'collected_charge.csv')
+			submeasurement_charge = pandas.read_csv(Raúl.path_to_directory_of_task('collected_charge_in_beta_scan')/'collected_charge.csv')
 			submeasurement_charge['measurement_name'] = submeasurement_name
 			submeasurement_charge['Bias voltage (V)'] = float(submeasurement_name.split('_')[-1].replace('V',''))
 			collected_charges.append(submeasurement_charge)
 		collected_charge_df = pandas.concat(collected_charges, ignore_index=True)
 		
 		collected_charge_df.to_csv(
-			Romina.path_to_default_output_directory/'collected_charge_vs_bias_voltage.csv',
+			task_handler.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage.csv',
 			index = False,
 		)
 		
@@ -177,37 +172,33 @@ def collected_charge_vs_bias_voltage(path_to_measurement_base_directory:Path, fo
 			y = 'Collected charge (V s)',
 			error_y = 'Collected charge (V s) error',
 			color = 'signal_name',
-			title = f'Collected charge vs bias voltage<br><sup>Measurement: {Romina.measurement_name}</sup>',
+			title = f'Collected charge vs bias voltage<br><sup>Run: {Romina.run_name}</sup>',
 			markers = True,
 		)
 		fig.write_html(
-			str(Romina.path_to_default_output_directory/'collected_charge_vs_bias_voltage.html'),
+			str(task_handler.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage.html'),
 			include_plotlyjs = 'cdn',
 		)
 
-def collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directory:Path):
-	Spencer = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'collected_charge_vs_bias_voltage_comparison',
-		_locals = locals(),
-	)
+def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:bool=False):
+	Spencer = bureaucrat
 	
-	Spencer.check_required_tasks_were_run_before('beta_scans')
+	Spencer.check_these_tasks_were_run_successfully('beta_scans')
 	
-	with Spencer.do_your_magic():
+	with Spencer.handle_task('collected_charge_vs_bias_voltage_comparison') as Spencers_employee:
 		collected_charges = []
-		for submeasurement_name, path_to_submeasurement in Spencer.find_submeasurements_of_task('beta_scans').items():
+		for submeasurement_name, path_to_submeasurement in Spencers_employee.list_subruns_of_task('beta_scans').items():
+			Raúl = RunBureaucrat(path_to_submeasurement)
 			collected_charge_vs_bias_voltage(
-				path_to_measurement_base_directory = path_to_submeasurement,
-				force_calculation_on_submeasurements = False,
+				bureaucrat = Raúl,
+				force_calculation_on_submeasurements = force,
 			)
-			Raul = NamedTaskBureaucrat(path_to_submeasurement, task_name='no_task', _locals=locals())
-			submeasurement_charge_vs_bias_voltage = pandas.read_csv(Raul.path_to_output_directory_of_task_named('collected_charge_vs_bias_voltage')/'collected_charge_vs_bias_voltage.csv')
+			submeasurement_charge_vs_bias_voltage = pandas.read_csv(Raúl.path_to_directory_of_task('collected_charge_vs_bias_voltage')/'collected_charge_vs_bias_voltage.csv')
 			submeasurement_charge_vs_bias_voltage['beta_scan_vs_bias_voltage'] = submeasurement_name
 			collected_charges.append(submeasurement_charge_vs_bias_voltage)
 		df = pandas.concat(collected_charges, ignore_index=True)
 		
-		df.to_csv(Spencer.path_to_default_output_directory/'collected_charge.csv', index=False)
+		df.to_csv(Spencers_employee.path_to_directory_of_my_task/'collected_charge.csv', index=False)
 		
 		df['measurement_timestamp'] = df['beta_scan_vs_bias_voltage'].apply(lambda x: x.split('_')[0])
 		fig = px.line(
@@ -218,7 +209,7 @@ def collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directo
 			color = 'measurement_timestamp',
 			facet_col = 'signal_name',
 			markers = True,
-			title = f'Collected charge comparison<br><sup>Measurement: {Spencer.measurement_name}</sup>',
+			title = f'Collected charge comparison<br><sup>Run: {Spencer.run_name}</sup>',
 			hover_data = ['beta_scan_vs_bias_voltage','measurement_name'],
 			labels = {
 				'measurement_name': 'Beta scan',
@@ -227,24 +218,20 @@ def collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directo
 			}
 		)
 		fig.write_html(
-			str(Spencer.path_to_default_output_directory/'collected_charge_vs_bias_voltage_comparison.html'),
+			str(Spencers_employee.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage_comparison.html'),
 			include_plotlyjs = 'cdn',
 		)
 
-def script_core(path_to_measurement_base_directory:Path):
-	Manuel = NamedTaskBureaucrat(
-		path_to_measurement_base_directory,
-		task_name = 'dummy_task_deleteme',
-		_locals = locals(),
-	)
-	if Manuel.check_required_tasks_were_run_before('beta_scans', raise_error=False):
-		collected_charge_vs_bias_voltage_comparison(path_to_measurement_base_directory)
-	elif Manuel.check_required_tasks_were_run_before('beta_scan_sweeping_bias_voltage', raise_error=False):
-		collected_charge_vs_bias_voltage(path_to_measurement_base_directory)
-	elif Manuel.check_required_tasks_were_run_before('beta_scan', raise_error=False):
-		collected_charge_in_beta_scan(path_to_measurement_base_directory, force=True)
+def script_core(bureaucrat:RunBureaucrat, force:bool):
+	Manuel = bureaucrat
+	if Manuel.check_these_tasks_were_run_successfully('beta_scans', raise_error=False):
+		collected_charge_vs_bias_voltage_comparison(Manuel, force)
+	elif Manuel.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage', raise_error=False):
+		collected_charge_vs_bias_voltage(Manuel, force)
+	elif Manuel.check_these_tasks_were_run_successfully('beta_scan', raise_error=False):
+		collected_charge_in_beta_scan(Manuel, force=True)
 	else:
-		raise RuntimeError(f'Dont know how to process measurement {repr(Manuel.measurement_name)} located in `{Manuel.path_to_measurement_base_directory}`...')
+		raise RuntimeError(f'Dont know how to process run {repr(Manuel.run_name)} located in `{Manuel.path_to_run_directory}`...')
 
 if __name__ == '__main__':
 	import argparse
@@ -257,8 +244,16 @@ if __name__ == '__main__':
 		dest = 'directory',
 		type = str,
 	)
+	parser.add_argument(
+		'--force',
+		help = 'If this flag is passed, it will force the calculation even if it was already done beforehand. Old data will be deleted.',
+		required = False,
+		dest = 'force',
+		action = 'store_true'
+	)
 
 	args = parser.parse_args()
 	script_core(
-		Path(args.directory),
+		RunBureaucrat(Path(args.directory)),
+		force = args.force,
 	)
