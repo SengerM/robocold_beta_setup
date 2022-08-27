@@ -180,7 +180,7 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 			include_plotlyjs = 'cdn',
 		)
 
-def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat):
+def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:bool=False):
 	Spencer = bureaucrat
 	
 	Spencer.check_these_tasks_were_run_successfully('beta_scans')
@@ -191,7 +191,7 @@ def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat):
 			Raúl = RunBureaucrat(path_to_submeasurement)
 			collected_charge_vs_bias_voltage(
 				bureaucrat = Raúl,
-				force_calculation_on_submeasurements = False,
+				force_calculation_on_submeasurements = force,
 			)
 			submeasurement_charge_vs_bias_voltage = pandas.read_csv(Raúl.path_to_directory_of_task('collected_charge_vs_bias_voltage')/'collected_charge_vs_bias_voltage.csv')
 			submeasurement_charge_vs_bias_voltage['beta_scan_vs_bias_voltage'] = submeasurement_name
@@ -222,12 +222,12 @@ def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat):
 			include_plotlyjs = 'cdn',
 		)
 
-def script_core(bureaucrat:RunBureaucrat):
+def script_core(bureaucrat:RunBureaucrat, force:bool):
 	Manuel = bureaucrat
 	if Manuel.check_these_tasks_were_run_successfully('beta_scans', raise_error=False):
-		collected_charge_vs_bias_voltage_comparison(Manuel)
+		collected_charge_vs_bias_voltage_comparison(Manuel, force)
 	elif Manuel.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage', raise_error=False):
-		collected_charge_vs_bias_voltage(Manuel)
+		collected_charge_vs_bias_voltage(Manuel, force)
 	elif Manuel.check_these_tasks_were_run_successfully('beta_scan', raise_error=False):
 		collected_charge_in_beta_scan(Manuel, force=True)
 	else:
@@ -244,6 +244,16 @@ if __name__ == '__main__':
 		dest = 'directory',
 		type = str,
 	)
+	parser.add_argument(
+		'--force',
+		help = 'If this flag is passed, it will force the calculation even if it was already done beforehand. Old data will be deleted.',
+		required = False,
+		dest = 'force',
+		action = 'store_true'
+	)
 
 	args = parser.parse_args()
-	script_core(RunBureaucrat(Path(args.directory)))
+	script_core(
+		RunBureaucrat(Path(args.directory)),
+		force = args.force,
+	)
