@@ -6,7 +6,7 @@ from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github
 import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
-from plot_everything_from_beta_scan import draw_histogram_and_langauss_fit
+from plot_beta_scan import draw_histogram_and_langauss_fit
 
 def apply_cuts(data_df, cuts_df):
 	"""
