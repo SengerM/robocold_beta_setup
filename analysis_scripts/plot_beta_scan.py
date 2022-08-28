@@ -53,7 +53,7 @@ def binned_fit_langauss(samples, bins='auto', nan_policy='drop'):
 	bin_centers = np.append(bin_centers, bin_centers[-1]+np.diff(bin_edges)[0])
 	landau_x_mpv_guess = bin_centers[np.argmax(hist)]
 	landau_xi_guess = median_abs_deviation(samples)/5
-	gauss_sigma_guess = landau_xi_guess/10
+	gauss_sigma_guess = landau_xi_guess/2
 	popt, pcov = curve_fit(
 		lambda x, mpv, xi, sigma: langauss.pdf(x, mpv, xi, sigma),
 		xdata = bin_centers,
