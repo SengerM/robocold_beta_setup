@@ -314,7 +314,7 @@ class TheRobocoldBetaSetup:
 	def set_oscilloscope_vdiv(self, oscilloscope_channel_number:int, vdiv:float, who:str):
 		"""Set the vertical scale of the given channel in the oscilloscope."""
 		with self._signal_acquisition_Lock(who), self._oscilloscope_Lock:
-			self._oscilloscope.set_vdiv(channel=channel, vdiv=vdiv)
+			self._oscilloscope.set_vdiv(channel=oscilloscope_channel_number, vdiv=vdiv)
 			
 	def set_oscilloscope_trigger_threshold(self, level:float, who:str):
 		"""Set the threshold level of the trigger."""
