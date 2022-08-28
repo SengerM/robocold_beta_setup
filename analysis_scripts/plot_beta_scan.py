@@ -224,11 +224,21 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 				str(path_to_save_plots/Path(f'{col} langauss fit.html')),
 				include_plotlyjs = 'cdn',
 			)
-		
+
+def plot_everything_from_beta_scans_recursively(bureaucrat:RunBureaucrat):
+	Melvin = bureaucrat
+	tasks_in_Melvins_run = [p.parts[-1] for p in Melvin.path_to_run_directory.iterdir() if p.is_dir()]
+	if 'beta_scan' in tasks_in_Melvins_run:
+		plot_everything_from_beta_scan(Melvin, measured_stuff_vs_when=False, all_distributions=False)
+	else:
+		for task_name in tasks_in_Melvins_run:
+			for run_name, path_to_run in Melvin.list_subruns_of_task(task_name).items():
+				plot_everything_from_beta_scans_recursively(RunBureaucrat(path_to_run))
+
 if __name__ == '__main__':
 	import argparse
 
-	parser = argparse.ArgumentParser(description='Makes plots with the distributions of the quantities parsed by the script "parse_raw_data_of_single_beta_scan.py".')
+	parser = argparse.ArgumentParser()
 	parser.add_argument('--dir',
 		metavar = 'path', 
 		help = 'Path to the base measurement directory.',
@@ -240,10 +250,4 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	
 	Enrique = RunBureaucrat(Path(args.directory))
-	
-	if Enrique.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage', raise_error=False):
-		for measurement_name, path_to_measurement in Enrique.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
-			print(f'Processing {measurement_name}...')
-			plot_everything_from_beta_scan(RunBureaucrat(path_to_measurement))
-	else:
-		plot_everything_from_beta_scan(Enrique)
+	plot_everything_from_beta_scans_recursively(Enrique)
