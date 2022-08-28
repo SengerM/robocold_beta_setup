@@ -6,7 +6,7 @@ import time
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-from TheSetup import connect_me_with_the_setup
+from TheSetup import connect_me_with_the_setup, load_beta_scans_configuration
 from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import threading
 import warnings
@@ -228,14 +228,14 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 	if not silent:
 		print('Beta scan finished.')
 
-def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers_per_voltage:int, bias_voltages:list, software_triggers:list=None, silent=False)->Path:
+def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers_per_voltage:list, bias_voltages:list, software_triggers:list=None, silent=False)->Path:
 	"""Perform multiple beta scans at different bias voltages each.
 	
 	Parameters
 	----------
 	bureaucrat: RunBureaucrat
 		The bureaucrat that will handle this measurement.
-	n_triggers_per_voltage: int
+	n_triggers_per_voltage: list of int
 		Number of triggers to record on each individual beta scan.
 	name_to_access_to_the_setup: str
 		Name to use when accessing to the setup.
@@ -279,18 +279,54 @@ def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_
 			with reporter.report_for_loop(len(bias_voltages), John.run_name) as reporter:
 				if software_triggers is None:
 					software_triggers = [lambda x: True for v in bias_voltages]
-				for bias_voltage,software_trigger in zip(bias_voltages,software_triggers):
+				for bias_voltage,software_trigger,n_triggers in zip(bias_voltages,software_triggers,n_triggers_per_voltage):
 					p = beta_scan(
 						beta_scan_sweeping_bias_voltage_task_bureaucrat.create_subrun(f'{John.run_name}_{int(bias_voltage)}V'),
 						name_to_access_to_the_setup = name_to_access_to_the_setup,
 						slot_number = slot_number,
-						n_triggers = n_triggers_per_voltage,
+						n_triggers = n_triggers,
 						bias_voltage = bias_voltage,
 						software_trigger = software_trigger,
 						silent = silent,
 					)
 					reporter.update(1)
-				
+
+def automatic_beta_scans(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, beta_scans_configuration_df:pandas.DataFrame, silent:bool=False):
+	"""Perform automatic beta scans.
+	"""
+	the_setup = connect_me_with_the_setup()
+	slots_to_measure = sorted(set(beta_scans_configuration_df.index.get_level_values('slot_number')))
+	Ramona = bureaucrat
+	with Ramona.handle_task('automatic_beta_scans', drop_old_data=False) as Ramonas_employee:
+		if not silent:
+			print(f'Waiting to acquire control of Robocold...')
+		with the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
+			if not silent:
+				print('Control of Robocold acquired!')
+			for slot_number in slots_to_measure:
+				if not silent:
+					print(f'Reseting robocold...')
+				the_setup.reset_robocold(who=name_to_access_to_the_setup)
+				the_setup.set_oscilloscope_vdiv(
+					oscilloscope_channel_number = the_setup.get_oscilloscope_configuration_df().loc['DUT','n_channel'], 
+					vdiv = beta_scans_configuration_df.loc[slot_number,'Oscilloscope vertical scale (V/DIV)'].max(),
+					who = name_to_access_to_the_setup,
+				)
+				if not silent:
+					print(f'Starting beta scans sweeping bias voltage on slot {slot_number}...')
+				John = Ramonas_employee.create_subrun(f'{create_a_timestamp()}_BetaScanSweepingBiasVoltage_{the_setup.get_name_of_device_in_slot_number(slot_number)}')
+				beta_scan_sweeping_bias_voltage(
+					bureaucrat = John,
+					name_to_access_to_the_setup = name_to_access_to_the_setup,
+					slot_number = slot_number,
+					n_triggers_per_voltage = beta_scans_configuration_df.loc[slot_number,'n_triggers'], 
+					bias_voltages = beta_scans_configuration_df.loc[slot_number,'Bias voltage (V)'],
+					software_triggers = beta_scans_configuration_df.loc[slot_number,'software_trigger'],
+					silent = silent,
+				)
+				if not silent:
+					print(f'Beta scan sweeping bias voltage on slot {slot_number} finished.')
+
 if __name__=='__main__':
 	import os
 	from configuration_files.current_run import Alberto
@@ -302,26 +338,19 @@ if __name__=='__main__':
 	
 	def software_trigger(signals_dict, minimum_DUT_amplitude:float):
 		DUT_signal = signals_dict['DUT']
-		PMT_signal = signals_dict['reference_trigger']
+		PMT_signal = signals_dict['MCP-PMT']
 		is_peak_in_correct_time_window = 0 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 7e-9 
 		is_DUT_amplitude_above_threshold = DUT_signal.amplitude > minimum_DUT_amplitude
 		return is_peak_in_correct_time_window and is_DUT_amplitude_above_threshold
 	
 	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
 	
-	BIAS_VOLTAGES = [170,180,190,194]
-	
-	# ------------------------------------------------------------------
-	
-	
 	with Alberto.handle_task('beta_scans', drop_old_data=False) as beta_scans_task_bureaucrat:
 		John = beta_scans_task_bureaucrat.create_subrun(create_a_timestamp() + '_' + input('Measurement name? ').replace(' ','_'))
-		beta_scan_sweeping_bias_voltage(
-			bureaucrat = John,
+		beta_scans_configuration_df = load_beta_scans_configuration()
+		beta_scans_configuration_df['software_trigger'] = lambda x: software_trigger(x, 0)
+		automatic_beta_scans(
+			bureaucrat = John, 
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
-			slot_number = 7,
-			n_triggers_per_voltage = 111,
-			bias_voltages = BIAS_VOLTAGES,
-			silent = False,
-			software_triggers = [lambda x,A=A: software_trigger(x, A) for A in [.03,.05,.1,.1]],
+			beta_scans_configuration_df = beta_scans_configuration_df,
 		)

@@ -11,6 +11,8 @@ from CrossProcessLock import CrossProcessNamedLock
 from threading import RLock
 from multiprocessing.managers import BaseManager
 
+PATH_TO_CONFIGURATION_FILES_DIRECTORY = Path('/home/sengerm/scripts_and_codes/repos/robocold_beta_setup/measuring_scripts/configuration_files')
+
 class TheRobocoldBetaSetup:
 	"""This class wraps all the hardware so if there are changes it is 
 	easy to adapt. It should be thread safe.
@@ -499,6 +501,9 @@ def connect_me_with_the_setup():
 	m.connect()
 	the_setup = m.get_the_setup()
 	return the_setup
+
+def load_beta_scans_configuration()->pandas.DataFrame:
+	return pandas.read_csv(PATH_TO_CONFIGURATION_FILES_DIRECTORY/'beta_scans_configuration.csv').set_index(['slot_number'])
 	
 if __name__=='__main__':
 	from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
