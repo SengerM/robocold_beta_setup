@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
 import numpy
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
-from plot_everything_from_beta_scan import binned_fit_langauss, hex_to_rgba
+from plot_beta_scan import binned_fit_langauss, hex_to_rgba
 from clean_beta_scan import tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan
 from landaupy import langauss, landau # https://github.com/SengerM/landaupy
 from jitter_calculation import resample_measured_data
@@ -183,11 +183,11 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:bool=False):
 	Spencer = bureaucrat
 	
-	Spencer.check_these_tasks_were_run_successfully('beta_scans')
+	Spencer.check_these_tasks_were_run_successfully('automatic_beta_scans')
 	
 	with Spencer.handle_task('collected_charge_vs_bias_voltage_comparison') as Spencers_employee:
 		collected_charges = []
-		for submeasurement_name, path_to_submeasurement in Spencers_employee.list_subruns_of_task('beta_scans').items():
+		for submeasurement_name, path_to_submeasurement in Spencers_employee.list_subruns_of_task('automatic_beta_scans').items():
 			Raúl = RunBureaucrat(path_to_submeasurement)
 			collected_charge_vs_bias_voltage(
 				bureaucrat = Raúl,
@@ -224,11 +224,11 @@ def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:
 
 def script_core(bureaucrat:RunBureaucrat, force:bool):
 	Manuel = bureaucrat
-	if Manuel.check_these_tasks_were_run_successfully('beta_scans', raise_error=False):
+	if Manuel.was_task_run_successfully('automatic_beta_scans'):
 		collected_charge_vs_bias_voltage_comparison(Manuel, force)
-	elif Manuel.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage', raise_error=False):
+	elif Manuel.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		collected_charge_vs_bias_voltage(Manuel, force)
-	elif Manuel.check_these_tasks_were_run_successfully('beta_scan', raise_error=False):
+	elif Manuel.was_task_run_successfully('beta_scan'):
 		collected_charge_in_beta_scan(Manuel, force=True)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(Manuel.run_name)} located in `{Manuel.path_to_run_directory}`...')
