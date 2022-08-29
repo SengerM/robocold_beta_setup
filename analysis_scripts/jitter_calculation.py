@@ -458,6 +458,13 @@ def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
 			CFD_thresholds = CFD_thresholds,
 			force = force,
 		)
+	elif Nestor.was_task_run_successfully('automatic_beta_scans'):
+		for run_name,path_to_run in Nestor.list_subruns_of_task('automatic_beta_scans').items():
+			jitter_calculation_beta_scan_sweeping_voltage(
+				bureaucrat = RunBureaucrat(path_to_run),
+				CFD_thresholds = CFD_thresholds,
+				force_calculation_on_submeasurements = force,
+			)
 	else:
 		raise RuntimeError(f'Cannot process run {repr(Nestor.run_name)} becasue I cannot find any of my known scripts to have ended successfully.')
 
@@ -483,6 +490,6 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	script_core(
 		RunBureaucrat(Path(args.directory)),
-		CFD_thresholds = {'DUT': 20, 'reference_trigger': 20},
+		CFD_thresholds = {'DUT': 20, 'MCP-PMT': 20},
 		force = args.force,
 	)
