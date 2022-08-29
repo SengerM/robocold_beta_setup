@@ -233,6 +233,8 @@ def plot_everything_from_beta_scans_recursively(bureaucrat:RunBureaucrat, measur
 		plot_everything_from_beta_scan(Melvin, measured_stuff_vs_when=measured_stuff_vs_when, all_distributions=all_distributions)
 	else:
 		for task_name in tasks_in_Melvins_run:
+			if not Melvin.was_task_run_successfully(task_name):
+				continue
 			for run_name, path_to_run in Melvin.list_subruns_of_task(task_name).items():
 				plot_everything_from_beta_scans_recursively(RunBureaucrat(path_to_run))
 
