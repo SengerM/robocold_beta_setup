@@ -333,7 +333,7 @@ if __name__=='__main__':
 	PATH_TO_ANALYSIS_SCRIPTS = Path(__file__).resolve().parent.parent/'analysis_scripts'
 	import sys
 	sys.path.append(str(PATH_TO_ANALYSIS_SCRIPTS))
-	from plot_everything_from_beta_scan import plot_everything_from_beta_scan
+	from plot_beta_scan import plot_everything_from_beta_scan
 	from utils import create_a_timestamp
 	
 	def software_trigger(signals_dict, minimum_DUT_amplitude:float):
