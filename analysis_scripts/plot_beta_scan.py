@@ -225,11 +225,11 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 				include_plotlyjs = 'cdn',
 			)
 
-def plot_everything_from_beta_scans_recursively(bureaucrat:RunBureaucrat):
+def plot_everything_from_beta_scans_recursively(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False):
 	Melvin = bureaucrat
 	tasks_in_Melvins_run = [p.parts[-1] for p in Melvin.path_to_run_directory.iterdir() if p.is_dir()]
 	if 'beta_scan' in tasks_in_Melvins_run:
-		plot_everything_from_beta_scan(Melvin, measured_stuff_vs_when=False, all_distributions=False)
+		plot_everything_from_beta_scan(Melvin, measured_stuff_vs_when=measured_stuff_vs_when, all_distributions=all_distributions)
 	else:
 		for task_name in tasks_in_Melvins_run:
 			for run_name, path_to_run in Melvin.list_subruns_of_task(task_name).items():
