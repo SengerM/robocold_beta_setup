@@ -74,16 +74,19 @@ def clean_beta_scan(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None)->Path
 		path_to_cuts_file = John.path_to_run_directory/Path('cuts.csv')
 	elif not isinstance(path_to_cuts_file, Path):
 		raise TypeError(f'`path_to_cuts_file` must be an instance of {Path}, received object of type {type(path_to_cuts_file)}.')
-	cuts_df = pandas.read_csv(path_to_cuts_file)
-	data_df = load_whole_dataframe(John.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 	
 	with John.handle_task('clean_beta_scan') as task:
+		cuts_df = pandas.read_csv(path_to_cuts_file)
+		REQUIRED_COLUMNS = {'signal_name','variable','cut_type','cut_value'}
+		if set(cuts_df.columns) != REQUIRED_COLUMNS:
+			raise ValueError(f'The file with the cuts {path_to_cuts_file} must have the following columns: {REQUIRED_COLUMNS}, but it has columns {set(cuts_df.columns)}.')
+		data_df = load_whole_dataframe(John.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 		cuts_df.to_csv(task.path_to_directory_of_my_task/Path(f'cuts.backup.csv'), index=False) # Create a backup.
 		filtered_triggers_df = apply_cuts(data_df, cuts_df)
 		filtered_triggers_df.reset_index().to_feather(task.path_to_directory_of_my_task/Path('result.fd'))
 
-def clean_beta_scan_submeasurements_using_the_same_cuts_for_all(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None):
-	"""Clean all sub- beta scans using the same cuts."""
+def clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None):
+	"""Clean all sub- beta scans at once."""
 	Eriberto = bureaucrat
 	Eriberto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
@@ -91,9 +94,18 @@ def clean_beta_scan_submeasurements_using_the_same_cuts_for_all(bureaucrat:RunBu
 		path_to_cuts_file = Eriberto.path_to_run_directory/'cuts.csv'
 	if not path_to_cuts_file.is_file():
 		raise FileNotFoundError(f'Cannot find file with the cuts in {path_to_cuts_file}.')
-	for submeasurement_name, path_to_submeasurement in Eriberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
+	cuts_df = pandas.read_csv(path_to_cuts_file)
+	REQUIRED_COLUMNS = {'run_name','signal_name','variable','cut_type','cut_value'}
+	if set(cuts_df.columns) != REQUIRED_COLUMNS:
+		raise ValueError(f'The file with the cuts {path_to_cuts_file} must have the following columns: {REQUIRED_COLUMNS}, but it has columns {set(cuts_df.columns)}.')
+	cuts_df.set_index('run_name',inplace=True)
+	for run_name, path_to_submeasurement in Eriberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
 		Quique = RunBureaucrat(path_to_submeasurement)
-		clean_beta_scan(Quique, path_to_cuts_file)
+		this_run_cuts_df = cuts_df.query(f'run_name=={repr(run_name)}')
+		if len(this_run_cuts_df) == 0:
+			continue
+		this_run_cuts_df.to_csv(Quique.path_to_temporary_directory/'cuts.cvs',index=False)
+		clean_beta_scan(Quique, Quique.path_to_temporary_directory/'cuts.cvs')
 
 def clean_beta_scan_plots(bureaucrat:RunBureaucrat, scatter_plot:bool=True, langauss_plots:bool=True, distributions:bool=False):
 	COLOR_DISCRETE_MAP = {
@@ -233,7 +245,7 @@ def plots_of_clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, sca
 def script_core(bureaucrat:RunBureaucrat):
 	John = bureaucrat
 	if John.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
-		clean_beta_scan_submeasurements_using_the_same_cuts_for_all(John)
+		clean_beta_scan_sweeping_bias_voltage(John)
 		plots_of_clean_beta_scan_sweeping_bias_voltage(John)
 	elif John.was_task_run_successfully('beta_scan'):
 		clean_beta_scan(John)
