@@ -70,11 +70,11 @@ def time_resolution_vs_bias_voltage_DUT_and_reference_trigger(bureaucrat:RunBure
 def time_resolution_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat):
 	Nicanor = bureaucrat
 	
-	Nicanor.check_these_tasks_were_run_successfully('beta_scans')
+	Nicanor.check_these_tasks_were_run_successfully('automatic_beta_scans')
 	
 	with Nicanor.handle_task('time_resolution_vs_bias_voltage_comparison') as Nicanors_employee:
 		time_resolutions = []
-		for submeasurement_name, path_to_submeasurement in Nicanors_employee.list_subruns_of_task('beta_scans').items():
+		for submeasurement_name, path_to_submeasurement in Nicanors_employee.list_subruns_of_task('automatic_beta_scans').items():
 			Raúl = RunBureaucrat(path_to_submeasurement)
 			Raúl.check_these_tasks_were_run_successfully('time_resolution_vs_bias_voltage_DUT_and_reference_trigger')
 			submeasurement_time_resolution = pandas.read_csv(Raúl.path_to_directory_of_task('time_resolution_vs_bias_voltage_DUT_and_reference_trigger')/'time_resolution.csv')
@@ -107,15 +107,26 @@ def time_resolution_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat):
 		)
 
 def script_core(bureaucrat:RunBureaucrat):
+	REFERENCE_SIGNAL_TIME_RESOLUTION = 17.32e-12 # My best characterization of the Photonis PMT.
+	REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR = 2.16e-12 # My best characterization of the Photonis PMT.
+	REFERENCE_SIGNAL_NAME = 'MCP-PMT'
+	
 	Manuel = bureaucrat
 	if Manuel.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		time_resolution_vs_bias_voltage_DUT_and_reference_trigger(
 			bureaucrat = Manuel,
-			reference_signal_name = 'reference_trigger',
-			reference_signal_time_resolution = 17.32e-12, # My best characterization of the Photonis PMT.
-			reference_signal_time_resolution_error = 2.16e-12, # My best characterization of the Photonis PMT.
+			reference_signal_name = REFERENCE_SIGNAL_NAME,
+			reference_signal_time_resolution = REFERENCE_SIGNAL_TIME_RESOLUTION,
+			reference_signal_time_resolution_error = REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR,
 		)
-	elif Manuel.was_task_run_successfully('beta_scans'):
+	elif Manuel.was_task_run_successfully('automatic_beta_scans'):
+		for run_name,path_to_run in Manuel.list_subruns_of_task('automatic_beta_scans').items():
+			time_resolution_vs_bias_voltage_DUT_and_reference_trigger(
+				bureaucrat = RunBureaucrat(path_to_run), 
+				reference_signal_name = REFERENCE_SIGNAL_NAME,
+				reference_signal_time_resolution = REFERENCE_SIGNAL_TIME_RESOLUTION,
+				reference_signal_time_resolution_error = REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR,
+			)
 		time_resolution_vs_bias_voltage_comparison(Manuel)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(Manuel.run_name)} located in {Manuel.path_to_run_directory}.')
