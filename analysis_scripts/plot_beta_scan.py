@@ -249,17 +249,25 @@ def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucra
 				path_to_subplots.append(
 					{
 						'plot_type': plot_type,
-						'path_to_plot': dummy_bureaucrat.path_to_directory_of_task('plot_everything_from_beta_scan')/f'parsed_from_waveforms/{plot_type}.html',
+						'path_to_plot': Path('..')/(dummy_bureaucrat.path_to_directory_of_task('plot_everything_from_beta_scan')/f'parsed_from_waveforms/{plot_type}.html').relative_to(Ernesto.path_to_run_directory),
 						'run_name': dummy_bureaucrat.run_name,
 					}
 				)
 		path_to_subplots_df = pandas.DataFrame(path_to_subplots).set_index('plot_type')
 		for plot_type in set(path_to_subplots_df.index.get_level_values('plot_type')):
-			html_doc = dominate.document(title=f'{plot_type} plots from beta_scan_sweeping_bias_voltage {Ernesto.run_name}')
+			document_title = f'{plot_type} plots from beta_scan_sweeping_bias_voltage {Ernesto.run_name}'
+			html_doc = dominate.document(title=document_title)
 			with html_doc:
-				with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
-					for idx,row in path_to_subplots_df.loc[plot_type].sort_values('run_name').iterrows():
-						dominate.tags.iframe(src=str(row['path_to_plot']), style=f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;')
+				dominate.tags.h1(document_title)
+				if plot_type in {'scatter matrix plot'}: # This is because these kind of plots draw a lot of memory and will cause problems if they are loaded all together.
+					with dominate.tags.ul():
+						for idx,row in path_to_subplots_df.loc[plot_type].sort_values('run_name').iterrows():
+							with dominate.tags.li():
+								dominate.tags.a(row['run_name'], href=row['path_to_plot'])
+				else:
+					with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
+						for idx,row in path_to_subplots_df.loc[plot_type].sort_values('run_name').iterrows():
+							dominate.tags.iframe(src=str(row['path_to_plot']), style=f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;')
 			with open(Ernestos_employee.path_to_directory_of_my_task/f'{plot_type} together.html', 'w') as ofile:
 				print(html_doc, file=ofile)
 
