@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
 from plot_beta_scan import draw_histogram_and_langauss_fit
+import dominate # https://github.com/Knio/dominate
 
 def apply_cuts(data_df, cuts_df):
 	"""
@@ -193,14 +194,48 @@ def clean_beta_scan_plots(bureaucrat:RunBureaucrat, scatter_plot:bool=True, lang
 					include_plotlyjs = 'cdn',
 				)
 
+def plots_of_clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, scatter_plot:bool=True, langauss_plots:bool=True, distributions:bool=False):
+	Ernesto = bureaucrat
+	Ernesto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	
+	with Ernesto.handle_task('plots_of_clean_beta_scan_sweeping_bias_voltage') as Ernestos_employee:
+		for run_name, path_to_run in Ernesto.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
+			clean_beta_scan_plots(RunBureaucrat(path_to_run), scatter_plot=scatter_plot, langauss_plots=langauss_plots, distributions=distributions)
+		path_to_subplots = []
+		for plot_type in {'scatter matrix plot','langauss fit to Amplitude (V)','langauss fit to Collected charge (V s)'}:
+			for subrun_name, path_to_subrun in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
+				dummy_bureaucrat = RunBureaucrat(path_to_subrun)
+				path_to_subplots.append(
+					{
+						'plot_type': plot_type,
+						'path_to_plot': Path('..')/(dummy_bureaucrat.path_to_directory_of_task('clean_beta_scan_plots')/f'{plot_type}.html').relative_to(Ernesto.path_to_run_directory),
+						'run_name': dummy_bureaucrat.run_name,
+					}
+				)
+		path_to_subplots_df = pandas.DataFrame(path_to_subplots).set_index('plot_type')
+		for plot_type in set(path_to_subplots_df.index.get_level_values('plot_type')):
+			document_title = f'{plot_type} plots from clean_beta_scan_plots {Ernesto.run_name}'
+			html_doc = dominate.document(title=document_title)
+			with html_doc:
+				dominate.tags.h1(document_title)
+				if plot_type in {'scatter matrix plot'}: # This is because these kind of plots draw a lot of memory and will cause problems if they are loaded all together.
+					with dominate.tags.ul():
+						for idx,row in path_to_subplots_df.loc[plot_type].sort_values('run_name').iterrows():
+							with dominate.tags.li():
+								dominate.tags.a(row['run_name'], href=row['path_to_plot'])
+				else:
+					with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
+						for idx,row in path_to_subplots_df.loc[plot_type].sort_values('run_name').iterrows():
+							dominate.tags.iframe(src=str(row['path_to_plot']), style=f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;')
+			with open(Ernestos_employee.path_to_directory_of_my_task/f'{plot_type} together.html', 'w') as ofile:
+				print(html_doc, file=ofile)
+
 def script_core(bureaucrat:RunBureaucrat):
 	John = bureaucrat
-	
-	if John.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage', raise_error=False):
+	if John.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		clean_beta_scan_submeasurements_using_the_same_cuts_for_all(John)
-		for subrun_name, path_to_subrun in John.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
-			clean_beta_scan_plots(RunBureaucrat(path_to_subrun))
-	elif John.check_these_tasks_were_run_successfully('beta_scan', raise_error=False):
+		plots_of_clean_beta_scan_sweeping_bias_voltage(John)
+	elif John.was_task_run_successfully('beta_scan'):
 		clean_beta_scan(John)
 		clean_beta_scan_plots(John)
 	else:
