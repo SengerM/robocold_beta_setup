@@ -131,6 +131,7 @@ def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
 				)
 		
 		collected_charge_results_df = pandas.DataFrame(collected_charge_results).set_index(['signal_name','measured_on'])
+		collected_charge_results_df.sort_index(inplace=True)
 		collected_charge_final_results = []
 		for signal_name in set(collected_charge_results_df.index.get_level_values('signal_name')):
 			collected_charge_final_results.append(
