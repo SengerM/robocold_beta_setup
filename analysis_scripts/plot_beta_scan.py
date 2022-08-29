@@ -10,6 +10,7 @@ from scipy.optimize import curve_fit
 from landaupy import langauss, landau # https://github.com/SengerM/landaupy
 from grafica.plotly_utils.utils import scatter_histogram # https://github.com/SengerM/grafica
 import warnings
+import dominate # https://github.com/Knio/dominate
 
 def hex_to_rgba(h, alpha):
     return tuple([int(h.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)] + [alpha])
@@ -235,6 +236,33 @@ def plot_everything_from_beta_scans_recursively(bureaucrat:RunBureaucrat, measur
 			for run_name, path_to_run in Melvin.list_subruns_of_task(task_name).items():
 				plot_everything_from_beta_scans_recursively(RunBureaucrat(path_to_run))
 
+def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False):
+	Ernesto = bureaucrat
+	Ernesto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	
+	with Ernesto.handle_task('plot_everything_from_beta_scan_sweeping_bias_voltage') as Ernestos_employee:
+		plot_everything_from_beta_scans_recursively(Ernesto, measured_stuff_vs_when=measured_stuff_vs_when, all_distributions=all_distributions)
+		path_to_subplots = []
+		for plot_type in {'Amplitude (V) ecdf','scatter matrix plot'}:
+			for subrun_name, path_to_subrun in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
+				dummy_bureaucrat = RunBureaucrat(path_to_subrun)
+				path_to_subplots.append(
+					{
+						'plot_type': plot_type,
+						'path_to_plot': dummy_bureaucrat.path_to_directory_of_task('plot_everything_from_beta_scan')/f'parsed_from_waveforms/{plot_type}.html',
+						'run_name': dummy_bureaucrat.run_name,
+					}
+				)
+		path_to_subplots_df = pandas.DataFrame(path_to_subplots).set_index('plot_type')
+		for plot_type in set(path_to_subplots_df.index.get_level_values('plot_type')):
+			html_doc = dominate.document(title=f'{plot_type} plots from beta_scan_sweeping_bias_voltage {Ernesto.run_name}')
+			with html_doc:
+				with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
+					for idx,row in path_to_subplots_df.loc[plot_type].sort_values('run_name').iterrows():
+						dominate.tags.iframe(src=str(row['path_to_plot']), style=f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;')
+			with open(Ernestos_employee.path_to_directory_of_my_task/f'{plot_type} together.html', 'w') as ofile:
+				print(html_doc, file=ofile)
+
 if __name__ == '__main__':
 	import argparse
 
@@ -250,4 +278,4 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	
 	Enrique = RunBureaucrat(Path(args.directory))
-	plot_everything_from_beta_scans_recursively(Enrique)
+	plot_everything_from_beta_scan_sweeping_bias_voltage(Enrique)
