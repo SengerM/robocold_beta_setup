@@ -6,7 +6,7 @@ import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
 import numpy
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 from clean_beta_scan import tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan
-from jitter_calculation import resample_measured_data, kMAD
+from jitter_calculation import resample_measured_data
 from grafica.plotly_utils.utils import scatter_histogram # https://github.com/SengerM/grafica
 import warnings
 
@@ -44,7 +44,7 @@ def noise_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
 				noise_results.append(
 					{
 						'measured_on': 'real data' if bootstrapped_iteration == False else 'resampled data',
-						'Noise (V)': kMAD(df.loc[signal_name,'Noise (V)']),
+						'Noise (V)': numpy.median(df.loc[signal_name,'Noise (V)']),
 						'signal_name': signal_name,
 					}
 				)
@@ -60,8 +60,8 @@ def noise_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
 					'signal_name': signal_name,
 				}
 			)
-		collected_charge_final_results_df = pandas.DataFrame(noise_final_results).set_index('signal_name')
-		collected_charge_final_results_df.to_csv(task_handler.path_to_directory_of_my_task/'noise.csv')
+		noise_final_results_df = pandas.DataFrame(noise_final_results).set_index('signal_name')
+		noise_final_results_df.to_csv(task_handler.path_to_directory_of_my_task/'noise.csv')
 
 def noise_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeasurements:bool=False):
 	Romina = bureaucrat
@@ -129,7 +129,7 @@ def noise_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:bool=False)
 			color = 'measurement_timestamp',
 			facet_col = 'signal_name',
 			markers = True,
-			title = f'Collected charge comparison<br><sup>Run: {Spencer.run_name}</sup>',
+			title = f'Noise comparison<br><sup>Run: {Spencer.run_name}</sup>',
 			hover_data = ['beta_scan_vs_bias_voltage','measurement_name'],
 			labels = {
 				'measurement_name': 'Beta scan',
