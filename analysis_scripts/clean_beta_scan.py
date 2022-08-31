@@ -103,7 +103,7 @@ def clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, path_to_cuts
 		Quique = RunBureaucrat(path_to_submeasurement)
 		this_run_cuts_df = cuts_df.query(f'run_name=={repr(run_name)}')
 		if len(this_run_cuts_df) == 0:
-			continue
+			raise RuntimeError(f'No cuts were found when cleaning beta scan for run {Eriberto.run_name} located in {Eriberto.path_to_run_directory}.')
 		this_run_cuts_df.to_csv(Quique.path_to_temporary_directory/'cuts.cvs',index=False)
 		clean_beta_scan(Quique, Quique.path_to_temporary_directory/'cuts.cvs')
 
