@@ -177,8 +177,8 @@ if __name__=='__main__':
 	from configuration_files.current_run import Alberto
 	from utils import create_a_timestamp
 	
-	SLOTS = [1,2,3,4,5,6,7]
-	VOLTAGE_VALUES = list(numpy.linspace(0,777,111))
+	SLOTS = [1,2,3,4,5,6,7,8]
+	VOLTAGE_VALUES = list(numpy.linspace(0,777,333))
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = pandas.read_csv('configuration_files/standby_configuration.csv').set_index('slot_number')['Current compliance (A)'].to_dict()
@@ -191,6 +191,6 @@ if __name__=='__main__':
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 			voltages = VOLTAGES_FOR_EACH_SLOT,
 			current_compliances = CURRENT_COMPLIANCES,
-			n_measurements_per_voltage = 11,
+			n_measurements_per_voltage = 2,
 			silent = False,
 		)
