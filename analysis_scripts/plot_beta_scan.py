@@ -235,8 +235,8 @@ def plot_everything_from_beta_scans_recursively(bureaucrat:RunBureaucrat, measur
 		for task_name in tasks_in_Melvins_run:
 			if not Melvin.was_task_run_successfully(task_name):
 				continue
-			for run_name, path_to_run in Melvin.list_subruns_of_task(task_name).items():
-				plot_everything_from_beta_scans_recursively(RunBureaucrat(path_to_run))
+			for subrun in Melvin.list_subruns_of_task(task_name):
+				plot_everything_from_beta_scans_recursively(subrun)
 
 def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False):
 	Ernesto = bureaucrat
@@ -246,13 +246,12 @@ def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucra
 		plot_everything_from_beta_scans_recursively(Ernesto, measured_stuff_vs_when=measured_stuff_vs_when, all_distributions=all_distributions)
 		path_to_subplots = []
 		for plot_type in {'Amplitude (V) ecdf','scatter matrix plot'}:
-			for subrun_name, path_to_subrun in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
-				dummy_bureaucrat = RunBureaucrat(path_to_subrun)
+			for subrun in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 				path_to_subplots.append(
 					{
 						'plot_type': plot_type,
-						'path_to_plot': Path('..')/(dummy_bureaucrat.path_to_directory_of_task('plot_everything_from_beta_scan')/f'parsed_from_waveforms/{plot_type}.html').relative_to(Ernesto.path_to_run_directory),
-						'run_name': dummy_bureaucrat.run_name,
+						'path_to_plot': Path('..')/(subrun.path_to_directory_of_task('plot_everything_from_beta_scan')/f'parsed_from_waveforms/{plot_type}.html').relative_to(Ernesto.path_to_run_directory),
+						'run_name': subrun.run_name,
 					}
 				)
 		path_to_subplots_df = pandas.DataFrame(path_to_subplots).set_index('plot_type')
