@@ -150,15 +150,14 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 	Romina.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	with Romina.handle_task('collected_charge_vs_bias_voltage') as task_handler:
 		collected_charges = []
-		for submeasurement_name, path_to_submeasurement in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
-			Raúl = RunBureaucrat(path_to_submeasurement)
+		for Raúl in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 			collected_charge_in_beta_scan(
 				bureaucrat = Raúl,
 				force = force_calculation_on_submeasurements,
 			)
 			submeasurement_charge = pandas.read_csv(Raúl.path_to_directory_of_task('collected_charge_in_beta_scan')/'collected_charge.csv')
-			submeasurement_charge['measurement_name'] = submeasurement_name
-			submeasurement_charge['Bias voltage (V)'] = float(submeasurement_name.split('_')[-1].replace('V',''))
+			submeasurement_charge['measurement_name'] = Raúl.run_name
+			submeasurement_charge['Bias voltage (V)'] = float(Raúl.run_name.split('_')[-1].replace('V',''))
 			collected_charges.append(submeasurement_charge)
 		collected_charge_df = pandas.concat(collected_charges, ignore_index=True)
 		
@@ -188,14 +187,14 @@ def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:
 	
 	with Spencer.handle_task('collected_charge_vs_bias_voltage_comparison') as Spencers_employee:
 		collected_charges = []
-		for submeasurement_name, path_to_submeasurement in Spencers_employee.list_subruns_of_task('automatic_beta_scans').items():
+		for Raúl in Spencers_employee.list_subruns_of_task('automatic_beta_scans'):
 			Raúl = RunBureaucrat(path_to_submeasurement)
 			collected_charge_vs_bias_voltage(
 				bureaucrat = Raúl,
 				force_calculation_on_submeasurements = force,
 			)
 			submeasurement_charge_vs_bias_voltage = pandas.read_csv(Raúl.path_to_directory_of_task('collected_charge_vs_bias_voltage')/'collected_charge_vs_bias_voltage.csv')
-			submeasurement_charge_vs_bias_voltage['beta_scan_vs_bias_voltage'] = submeasurement_name
+			submeasurement_charge_vs_bias_voltage['beta_scan_vs_bias_voltage'] = Raúl.run_name
 			collected_charges.append(submeasurement_charge_vs_bias_voltage)
 		df = pandas.concat(collected_charges, ignore_index=True)
 		

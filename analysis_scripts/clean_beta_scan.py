@@ -99,9 +99,8 @@ def clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, path_to_cuts
 	if set(cuts_df.columns) != REQUIRED_COLUMNS:
 		raise ValueError(f'The file with the cuts {path_to_cuts_file} must have the following columns: {REQUIRED_COLUMNS}, but it has columns {set(cuts_df.columns)}.')
 	cuts_df.set_index('run_name',inplace=True)
-	for run_name, path_to_submeasurement in Eriberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
-		Quique = RunBureaucrat(path_to_submeasurement)
-		this_run_cuts_df = cuts_df.query(f'run_name=={repr(run_name)}')
+	for Quique in Eriberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+		this_run_cuts_df = cuts_df.query(f'run_name=={repr(Quique.run_name)}')
 		if len(this_run_cuts_df) == 0:
 			raise RuntimeError(f'No cuts were found when cleaning beta scan for run {Eriberto.run_name} located in {Eriberto.path_to_run_directory}.')
 		this_run_cuts_df.to_csv(Quique.path_to_temporary_directory/'cuts.cvs',index=False)
@@ -211,12 +210,11 @@ def plots_of_clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, sca
 	Ernesto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
 	with Ernesto.handle_task('plots_of_clean_beta_scan_sweeping_bias_voltage') as Ernestos_employee:
-		for run_name, path_to_run in Ernesto.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
-			clean_beta_scan_plots(RunBureaucrat(path_to_run), scatter_plot=scatter_plot, langauss_plots=langauss_plots, distributions=distributions)
+		for dummy_bureaucrat in Ernesto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			clean_beta_scan_plots(dummy_bureaucrat, scatter_plot=scatter_plot, langauss_plots=langauss_plots, distributions=distributions)
 		path_to_subplots = []
 		for plot_type in {'scatter matrix plot','langauss fit to Amplitude (V)','langauss fit to Collected charge (V s)'}:
-			for subrun_name, path_to_subrun in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
-				dummy_bureaucrat = RunBureaucrat(path_to_subrun)
+			for dummy_bureaucrat in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 				path_to_subplots.append(
 					{
 						'plot_type': plot_type,

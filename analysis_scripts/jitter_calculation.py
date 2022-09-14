@@ -410,8 +410,7 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 	
 	with Norberto.handle_task('jitter_calculation_beta_scan_sweeping_voltage') as Norbertos_employee:
 		jitters = []
-		for submeasurement_name, path_to_submeasurement in Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
-			Raúl = RunBureaucrat(path_to_submeasurement)
+		for Raúl in Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 			jitter_calculation_beta_scan(
 				bureaucrat = Raúl,
 				CFD_thresholds = CFD_thresholds,
@@ -423,8 +422,8 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 			)
 			submeasurement_jitter.set_index('variable_name', inplace=True)
 			submeasurement_jitter = submeasurement_jitter['value']
-			submeasurement_jitter['measurement_name'] = submeasurement_name
-			submeasurement_jitter['Bias voltage (V)'] = float(submeasurement_name.split('_')[-1].replace('V',''))
+			submeasurement_jitter['measurement_name'] = Raúl.run_name
+			submeasurement_jitter['Bias voltage (V)'] = float(Raúl.run_name.split('_')[-1].replace('V',''))
 			jitters.append(submeasurement_jitter)
 		
 		jitter_df = pandas.DataFrame.from_records(jitters)

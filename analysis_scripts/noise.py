@@ -69,15 +69,14 @@ def noise_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeas
 	Romina.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	with Romina.handle_task('noise_vs_bias_voltage') as task_handler:
 		collected_noises = []
-		for submeasurement_name, path_to_submeasurement in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items():
-			Raúl = RunBureaucrat(path_to_submeasurement)
+		for Raúl in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 			noise_in_beta_scan(
 				bureaucrat = Raúl,
 				force = force_calculation_on_submeasurements,
 			)
 			submeasurement_noise = pandas.read_csv(Raúl.path_to_directory_of_task('noise_in_beta_scan')/'noise.csv')
-			submeasurement_noise['measurement_name'] = submeasurement_name
-			submeasurement_noise['Bias voltage (V)'] = float(submeasurement_name.split('_')[-1].replace('V',''))
+			submeasurement_noise['measurement_name'] = Raúl.run_name
+			submeasurement_noise['Bias voltage (V)'] = float(Raúl.run_name.split('_')[-1].replace('V',''))
 			collected_noises.append(submeasurement_noise)
 		noise_df = pandas.concat(collected_noises, ignore_index=True)
 		
@@ -107,14 +106,13 @@ def noise_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:bool=False)
 	
 	with Spencer.handle_task('noise_vs_bias_voltage_comparison') as Spencers_employee:
 		noises = []
-		for submeasurement_name, path_to_submeasurement in Spencers_employee.list_subruns_of_task('automatic_beta_scans').items():
-			Raúl = RunBureaucrat(path_to_submeasurement)
+		for Raúl in Spencers_employee.list_subruns_of_task('automatic_beta_scans'):
 			noise_vs_bias_voltage(
 				bureaucrat = Raúl,
 				force_calculation_on_submeasurements = force,
 			)
 			noise = pandas.read_csv(Raúl.path_to_directory_of_task('noise_vs_bias_voltage')/'noise_vs_bias_voltage.csv')
-			noise['beta_scan_vs_bias_voltage'] = submeasurement_name
+			noise['beta_scan_vs_bias_voltage'] = Raúl.run_name
 			noises.append(noise)
 		df = pandas.concat(noises, ignore_index=True)
 		

@@ -13,8 +13,8 @@ def time_resolution_vs_bias_voltage_DUT_and_reference_trigger(bureaucrat:RunBure
 	
 	Norberto.check_these_tasks_were_run_successfully(['jitter_calculation_beta_scan_sweeping_voltage','beta_scan_sweeping_bias_voltage'])
 	
-	path_to_any_submeasurement = [p for _,p in Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage').items()][0]
-	signal_names = set(load_whole_dataframe(path_to_any_submeasurement/RunBureaucrat(path_to_any_submeasurement).path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite').index.get_level_values('signal_name'))
+	any_subrun = Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage')[0]
+	signal_names = set(load_whole_dataframe(any_subrun.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite').index.get_level_values('signal_name'))
 	
 	if reference_signal_name not in signal_names:
 		raise ValueError(f'`reference_signal_name` is `{repr(reference_signal_name)}` which cannot be found in the measured signal names which are `{repr(signal_names)}`.')
@@ -74,11 +74,10 @@ def time_resolution_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat):
 	
 	with Nicanor.handle_task('time_resolution_vs_bias_voltage_comparison') as Nicanors_employee:
 		time_resolutions = []
-		for submeasurement_name, path_to_submeasurement in Nicanors_employee.list_subruns_of_task('automatic_beta_scans').items():
-			Raúl = RunBureaucrat(path_to_submeasurement)
+		for Raúl in Nicanors_employee.list_subruns_of_task('automatic_beta_scans'):
 			Raúl.check_these_tasks_were_run_successfully('time_resolution_vs_bias_voltage_DUT_and_reference_trigger')
 			submeasurement_time_resolution = pandas.read_csv(Raúl.path_to_directory_of_task('time_resolution_vs_bias_voltage_DUT_and_reference_trigger')/'time_resolution.csv')
-			submeasurement_time_resolution['beta_scan_vs_bias_voltage'] = submeasurement_name
+			submeasurement_time_resolution['beta_scan_vs_bias_voltage'] = Raúl.run_name
 			time_resolutions.append(submeasurement_time_resolution)
 		df = pandas.concat(time_resolutions, ignore_index=True)
 		
