@@ -73,14 +73,14 @@ def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
 				try:
 					popt, _, hist, bin_centers = binned_fit_langauss(df.loc[signal_name,'Collected charge (V s)'])
 					successful_fit[-1] = True
+					popts[signal_name] = popt # Need this to do the plot later on.
+					bin_centerss[signal_name] =  bin_centers # Need this to do the plot later on.
 				except Exception as e:
 					pass
-				popts[signal_name] = popt # Need this to do the plot later on.
-				bin_centerss[signal_name] =  bin_centers # Need this to do the plot later on.
 			
 			if not all(successful_fit):
 				if not bootstrapped_iteration:
-					raise RuntimeError(f'Cannot fit a Langauss to the collected charge of one of the signals.')
+					raise RuntimeError(f'Cannot fit a Langauss to the collected charge of one of the signals in run {Norberto.run_name}.')
 				warnings.warn(f'Could not fit Langauss to one of the signals during a bootstrapped iteration. I will just try again...')
 				n_bootstrap -= 1
 				continue
