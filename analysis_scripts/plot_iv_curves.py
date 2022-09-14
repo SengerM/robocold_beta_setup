@@ -64,11 +64,10 @@ def plot_IV_curves_all_together(bureaucrat:RunBureaucrat):
 	
 	with Richard.handle_task('plot_IV_curves_all_together') as plot_IV_curves_all_together_task_handler:
 		measured_data_list = []
-		for subrun_name, path_to_subrun in Richard.list_subruns_of_task('measure_iv_curves_on_multiple_slots').items():
-			Felipe = RunBureaucrat(path_to_subrun)
-			Felipe.check_these_tasks_were_run_successfully('measure_iv_curve')
+		for subrun in Richard.list_subruns_of_task('measure_iv_curves_on_multiple_slots'):
+			subrun.check_these_tasks_were_run_successfully('measure_iv_curve')
 			measured_data_list.append(
-				load_whole_dataframe(Felipe.path_to_directory_of_task('measure_iv_curve')/'measured_data.sqlite').reset_index(),
+				load_whole_dataframe(subrun.path_to_directory_of_task('measure_iv_curve')/'measured_data.sqlite').reset_index(),
 			)
 		measured_data_df = pandas.concat(measured_data_list, ignore_index=True)
 		measured_data_df['Bias voltage (V)'] *= -1
