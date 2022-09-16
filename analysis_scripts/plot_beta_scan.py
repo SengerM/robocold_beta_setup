@@ -272,6 +272,14 @@ def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucra
 			with open(Ernestos_employee.path_to_directory_of_my_task/f'{plot_type} together.html', 'w') as ofile:
 				print(html_doc, file=ofile)
 
+def script_core(bureaucrat:RunBureaucrat):
+	if bureaucrat.was_task_run_successfully('beta_scan'):
+		plot_everything_from_beta_scan(bureaucrat = bureaucrat)
+	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+		plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat = bureaucrat)
+	else:
+		raise RuntimeError(f'Dont know how to process run {repr(bureaucrat.run_name)} located in {bureaucrat.path_to_run_directory}.')
+
 if __name__ == '__main__':
 	import argparse
 
@@ -287,4 +295,4 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	
 	Enrique = RunBureaucrat(Path(args.directory))
-	plot_everything_from_beta_scan_sweeping_bias_voltage(Enrique)
+	script_core(Enrique)
