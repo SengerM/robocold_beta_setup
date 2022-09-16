@@ -188,7 +188,6 @@ def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:
 	with Spencer.handle_task('collected_charge_vs_bias_voltage_comparison') as Spencers_employee:
 		collected_charges = []
 		for Raúl in Spencers_employee.list_subruns_of_task('automatic_beta_scans'):
-			Raúl = RunBureaucrat(path_to_submeasurement)
 			collected_charge_vs_bias_voltage(
 				bureaucrat = Raúl,
 				force_calculation_on_submeasurements = force,

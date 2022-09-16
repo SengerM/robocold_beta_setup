@@ -119,9 +119,9 @@ def script_core(bureaucrat:RunBureaucrat):
 			reference_signal_time_resolution_error = REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR,
 		)
 	elif Manuel.was_task_run_successfully('automatic_beta_scans'):
-		for run_name,path_to_run in Manuel.list_subruns_of_task('automatic_beta_scans').items():
+		for b in Manuel.list_subruns_of_task('automatic_beta_scans'):
 			time_resolution_vs_bias_voltage_DUT_and_reference_trigger(
-				bureaucrat = RunBureaucrat(path_to_run), 
+				bureaucrat = b,
 				reference_signal_name = REFERENCE_SIGNAL_NAME,
 				reference_signal_time_resolution = REFERENCE_SIGNAL_TIME_RESOLUTION,
 				reference_signal_time_resolution_error = REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR,
