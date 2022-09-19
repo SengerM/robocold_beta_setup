@@ -458,9 +458,9 @@ def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
 			force = force,
 		)
 	elif Nestor.was_task_run_successfully('automatic_beta_scans'):
-		for run_name,path_to_run in Nestor.list_subruns_of_task('automatic_beta_scans').items():
+		for b in Nestor.list_subruns_of_task('automatic_beta_scans'):
 			jitter_calculation_beta_scan_sweeping_voltage(
-				bureaucrat = RunBureaucrat(path_to_run),
+				bureaucrat = b,
 				CFD_thresholds = CFD_thresholds,
 				force_calculation_on_submeasurements = force,
 			)
