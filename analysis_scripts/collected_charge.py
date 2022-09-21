@@ -12,6 +12,7 @@ from landaupy import langauss, landau # https://github.com/SengerM/landaupy
 from jitter_calculation import resample_measured_data
 from grafica.plotly_utils.utils import scatter_histogram # https://github.com/SengerM/grafica
 import warnings
+import multiprocessing
 
 N_BOOTSTRAP = 99
 grafica.plotly_utils.utils.set_my_template_as_default()
@@ -144,17 +145,21 @@ def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
 		collected_charge_final_results_df = pandas.DataFrame(collected_charge_final_results).set_index('signal_name')
 		collected_charge_final_results_df.to_csv(task_handler.path_to_directory_of_my_task/'collected_charge.csv')
 
-def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeasurements:bool=False):
+def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
 	Romina = bureaucrat
 	
 	Romina.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	
+	subruns = Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
+	with multiprocessing.Pool(number_of_processes) as p:
+		p.starmap(
+			collected_charge_in_beta_scan,
+			[(bur,frc) for bur,frc in zip(subruns, [force_calculation_on_submeasurements]*len(subruns))]
+		)
+	
 	with Romina.handle_task('collected_charge_vs_bias_voltage') as task_handler:
 		collected_charges = []
 		for Raúl in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
-			collected_charge_in_beta_scan(
-				bureaucrat = Raúl,
-				force = force_calculation_on_submeasurements,
-			)
 			submeasurement_charge = pandas.read_csv(Raúl.path_to_directory_of_task('collected_charge_in_beta_scan')/'collected_charge.csv')
 			submeasurement_charge['measurement_name'] = Raúl.run_name
 			submeasurement_charge['Bias voltage (V)'] = float(Raúl.run_name.split('_')[-1].replace('V',''))
@@ -180,7 +185,7 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 			include_plotlyjs = 'cdn',
 		)
 
-def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:bool=False):
+def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat):
 	Spencer = bureaucrat
 	
 	Spencer.check_these_tasks_were_run_successfully('automatic_beta_scans')
@@ -188,10 +193,6 @@ def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:
 	with Spencer.handle_task('collected_charge_vs_bias_voltage_comparison') as Spencers_employee:
 		collected_charges = []
 		for Raúl in Spencers_employee.list_subruns_of_task('automatic_beta_scans'):
-			collected_charge_vs_bias_voltage(
-				bureaucrat = Raúl,
-				force_calculation_on_submeasurements = force,
-			)
 			submeasurement_charge_vs_bias_voltage = pandas.read_csv(Raúl.path_to_directory_of_task('collected_charge_vs_bias_voltage')/'collected_charge_vs_bias_voltage.csv')
 			submeasurement_charge_vs_bias_voltage['beta_scan_vs_bias_voltage'] = Raúl.run_name
 			collected_charges.append(submeasurement_charge_vs_bias_voltage)
@@ -224,9 +225,19 @@ def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat, force:
 def script_core(bureaucrat:RunBureaucrat, force:bool):
 	Manuel = bureaucrat
 	if Manuel.was_task_run_successfully('automatic_beta_scans'):
-		collected_charge_vs_bias_voltage_comparison(Manuel, force)
+		for b in Manuel.list_subruns_of_task('automatic_beta_scans'):
+			collected_charge_vs_bias_voltage(
+				bureaucrat = b,
+				force_calculation_on_submeasurements = force,
+				number_of_processes = max(multiprocessing.cpu_count()-1,1)
+			)
+		collected_charge_vs_bias_voltage_comparison(Manuel)
 	elif Manuel.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
-		collected_charge_vs_bias_voltage(Manuel, force)
+		collected_charge_vs_bias_voltage(
+			bureaucrat = Manuel,
+			force_calculation_on_submeasurements = force,
+			number_of_processes = max(multiprocessing.cpu_count()-1,1)
+		)
 	elif Manuel.was_task_run_successfully('beta_scan'):
 		collected_charge_in_beta_scan(Manuel, force=True)
 	else:
