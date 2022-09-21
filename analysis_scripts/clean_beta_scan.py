@@ -39,11 +39,12 @@ def apply_cuts(data_df, cuts_df):
 	triggers_accepted_df = pandas.DataFrame({'is_background': True}, index=data_df.index)
 	for idx, cut_row in cuts_df.iterrows():
 		if cut_row['cut_type'] == 'lower':
-			triggers_accepted_df['is_background'] &= data_df[(cut_row['variable'],cut_row['signal_name'])] < cut_row['cut_value']
-		elif cut_row['cut_type'] == 'higher':
 			triggers_accepted_df['is_background'] &= data_df[(cut_row['variable'],cut_row['signal_name'])] > cut_row['cut_value']
+		elif cut_row['cut_type'] == 'higher':
+			triggers_accepted_df['is_background'] &= data_df[(cut_row['variable'],cut_row['signal_name'])] < cut_row['cut_value']
 		else:
 			raise ValueError('Received a cut of type `cut_type={}`, dont know that that is...'.format(cut_row['cut_type']))
+	triggers_accepted_df['is_background'] = ~triggers_accepted_df['is_background']
 	return triggers_accepted_df
 
 def clean_beta_scan(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None)->Path:
