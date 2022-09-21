@@ -10,6 +10,7 @@ from scipy.optimize import curve_fit
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import shutil
 from clean_beta_scan import tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan
+import multiprocessing
 
 N_BOOTSTRAP = 99
 STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION = 'sigma_from_gaussian_fit' # For the time resolution I will use the `sigma_from_gaussian_fit` because in practice ends up being the most robust and reliable of all.
@@ -403,19 +404,21 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 			include_plotlyjs = 'cdn',
 		)
 
-def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_thresholds='best', force_calculation_on_submeasurements:bool=False):
+def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_thresholds='best', force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
 	Norberto = bureaucrat
 	
 	Norberto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
+	subruns = Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
+	with multiprocessing.Pool(number_of_processes) as p:
+		p.starmap(
+			jitter_calculation_beta_scan,
+			[(bur,thrshld,frc) for bur,thrshld,frc in zip(subruns, [CFD_thresholds]*len(subruns), [force_calculation_on_submeasurements]*len(subruns))]
+		)
+	
 	with Norberto.handle_task('jitter_calculation_beta_scan_sweeping_voltage') as Norbertos_employee:
 		jitters = []
 		for Raúl in Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
-			jitter_calculation_beta_scan(
-				bureaucrat = Raúl,
-				CFD_thresholds = CFD_thresholds,
-				force = force_calculation_on_submeasurements,
-			)
 			submeasurement_jitter = pandas.read_csv(
 				Raúl.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.csv',
 				names = ['variable_name','value'],
@@ -450,6 +453,7 @@ def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
 			bureaucrat = Nestor,
 			CFD_thresholds = CFD_thresholds,
 			force_calculation_on_submeasurements = force,
+			number_of_processes = max(multiprocessing.cpu_count()-1,1),
 		)
 	elif Nestor.was_task_run_successfully('beta_scan'):
 		jitter_calculation_beta_scan(
@@ -463,6 +467,7 @@ def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
 				bureaucrat = b,
 				CFD_thresholds = CFD_thresholds,
 				force_calculation_on_submeasurements = force,
+				number_of_processes = max(multiprocessing.cpu_count()-1,1),
 			)
 	else:
 		raise RuntimeError(f'Cannot process run {repr(Nestor.run_name)} becasue I cannot find any of my known scripts to have ended successfully.')
