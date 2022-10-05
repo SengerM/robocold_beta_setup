@@ -1,8 +1,8 @@
 from TheSetup import connect_me_with_the_setup
 import time
 
-SLOT_NUMBER = 4
-BIAS_VOLTAGE = 200
+SLOT_NUMBER = 2
+BIAS_VOLTAGE = 180
 CURRENT_COMPLIANCE = 10e-6
 ROBOCOLD_OFFSET = (0,0)
 
@@ -21,5 +21,5 @@ with the_setup.hold_control_of_bias_for_slot_number(SLOT_NUMBER,'me'), the_setup
 	the_setup.set_current_compliance(SLOT_NUMBER, amperes=CURRENT_COMPLIANCE, who='me')
 	the_setup.set_bias_voltage(SLOT_NUMBER,BIAS_VOLTAGE,'me')
 	while True:
-		print(f'{the_setup.measure_bias_voltage(SLOT_NUMBER):.2f} V, {the_setup.measure_bias_current(SLOT_NUMBER)*1e6:.2f} µA')
-		time.sleep(3)
+		print(f'Slot {SLOT_NUMBER}: {the_setup.get_name_of_device_in_slot_number(SLOT_NUMBER)} | {the_setup.measure_bias_voltage(slot_number=SLOT_NUMBER):.2f} V | {the_setup.measure_bias_current(slot_number=SLOT_NUMBER)*1e6:.2f} µA')
+		time.sleep(1)
