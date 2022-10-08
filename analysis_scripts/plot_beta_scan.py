@@ -15,7 +15,7 @@ import dominate # https://github.com/Knio/dominate
 def hex_to_rgba(h, alpha):
     return tuple([int(h.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)] + [alpha])
 
-def binned_fit_langauss(samples, bins='auto', nan_policy='drop'):
+def binned_fit_langauss(samples, bins='auto', nan_policy='drop', maxfev=0):
 	"""Perform a binned fit of a langauss distribution.
 	
 	Arguments
@@ -61,11 +61,12 @@ def binned_fit_langauss(samples, bins='auto', nan_policy='drop'):
 		ydata = hist,
 		p0 = [landau_x_mpv_guess, landau_xi_guess, gauss_sigma_guess],
 		absolute_sigma = True,
+		maxfev = maxfev,
 		# ~ bounds = ([0]*3, [float('inf')]*3), # Don't know why setting the limits make this to fail.
 	)
 	return popt, pcov, hist, bin_centers
 
-def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, column_name, line_color):
+def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, column_name, line_color, maxfev=0):
 	samples = parsed_from_waveforms_df.loc[pandas.IndexSlice[:, signal_name], column_name]
 	
 	fig.add_trace(
@@ -81,7 +82,7 @@ def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, 
 	
 	fit_successfull = False
 	try:
-		popt, _, hist, bin_centers = binned_fit_langauss(samples)
+		popt, _, hist, bin_centers = binned_fit_langauss(samples, maxfev=maxfev)
 		fit_successfull = True
 	except Exception as e:
 		warnings.warn(f'Cannot fit langauss to data, reason: {repr(e)}.')
