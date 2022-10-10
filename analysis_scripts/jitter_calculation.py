@@ -207,13 +207,17 @@ def plot_cfd(jitter_df, constant_fraction_discriminator_thresholds_to_use_for_th
 		)
 		fig.add_trace(
 			go.Scatter(
-				x = [constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]],
-				y = [constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]],
+				x = [constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]],
+				y = [constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]],
 				mode = 'markers',
 				hovertext = [f'<b>Minimum</b><br>{pivot_table_df.index.name}: {constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]:.0f} %<br>{pivot_table_df.columns.name}: {constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]:.0f} %<br>{jitter_column_name} {col}: {df.loc[constant_fraction_discriminator_thresholds_to_use_for_the_jitter,col]*1e12:.2f} ps'],
 				hoverinfo = 'text',
 				marker = dict(
-					color = '#61ff5c',
+					color = '#70ff96',
+					line_width = 2,
+					line_color = '#000000',
+					symbol = 'x',
+					size = 22,
 				),
 				name = '',
 			)
@@ -223,8 +227,8 @@ def plot_cfd(jitter_df, constant_fraction_discriminator_thresholds_to_use_for_th
 			scaleratio = 1,
 		)
 		fig.update_layout(
-			xaxis_title = pivot_table_df.index.name,
-			yaxis_title = pivot_table_df.columns.name,
+			xaxis_title = pivot_table_df.columns.name,
+			yaxis_title = pivot_table_df.index.name,
 		)
 		figs[col] = fig
 	return figs
@@ -322,7 +326,7 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 			else: # Do some plots
 				figs = plot_cfd(jitter_df, constant_fraction_discriminator_thresholds_to_use_for_the_jitter)
 				for key,fig in figs.items():
-					fig.update_layout(title=f'CFD jitter measured using {key} from Δt<br><sup>Run: {Norberto.run_name}</sup>')
+					fig.update_layout(title=f'Jitter vs k<sub>CFD</sub><br><sup>Run: {Norberto.run_name}</sup>')
 				figs[STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION].write_html(str(Norbertos_employee.path_to_directory_of_my_task/f'CFD jitter using {key}.html'), include_plotlyjs='cdn')
 				
 				fig = go.Figure()
@@ -511,6 +515,6 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	script_core(
 		RunBureaucrat(Path(args.directory)),
-		CFD_thresholds = {'DUT': 20, 'MCP-PMT': 20},
+		CFD_thresholds = 'best',
 		force = args.force,
 	)
