@@ -5,128 +5,122 @@ import plotly.express as px
 import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
 from uncertainties import ufloat
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
+from summarize_parameters import read_summarized_data
 
 grafica.plotly_utils.utils.set_my_template_as_default()
 
-def time_resolution_vs_bias_voltage_DUT_and_reference_trigger(bureaucrat:RunBureaucrat, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
-	Norberto = bureaucrat
+REFERENCE_SIGNAL_TIME_RESOLUTION = 17.32e-12 # My best characterization of the Photonis PMT.
+REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR = 2.16e-12 # My best characterization of the Photonis PMT.
+REFERENCE_SIGNAL_NAME = 'MCP-PMT'
+
+def time_resolution_DUT_and_reference(bureaucrat:RunBureaucrat, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
+	bureaucrat.check_these_tasks_were_run_successfully(['beta_scan','jitter_calculation_beta_scan'])
 	
-	Norberto.check_these_tasks_were_run_successfully(['jitter_calculation_beta_scan_sweeping_voltage','beta_scan_sweeping_bias_voltage'])
-	
-	any_subrun = Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage')[0]
-	signal_names = set(load_whole_dataframe(any_subrun.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite').index.get_level_values('signal_name'))
-	
-	if reference_signal_name not in signal_names:
-		raise ValueError(f'`reference_signal_name` is `{repr(reference_signal_name)}` which cannot be found in the measured signal names which are `{repr(signal_names)}`.')
-	
-	DUT_signal_name = signal_names - {reference_signal_name}
-	if len(DUT_signal_name) != 1:
-		raise RuntimeError(f'Cannot find the name of the DUT.')
-	DUT_signal_name = list(DUT_signal_name)[0]
-	
-	with Norberto.handle_task('time_resolution_vs_bias_voltage_DUT_and_reference_trigger') as Norbertos_employee:
-		jitter_df = pandas.read_csv(Norberto.path_to_directory_of_task('jitter_calculation_beta_scan_sweeping_voltage')/'jitter_vs_bias_voltage.csv')
-		jitter_df['Jitter (s) ufloat'] = jitter_df.apply(lambda x: ufloat(x['Jitter (s)'],x['Jitter (s) error']), axis=1)
-		reference_signal_time_resolution_ufloat = ufloat(reference_signal_time_resolution, reference_signal_time_resolution_error)
-		jitter_df.set_index(['Bias voltage (V)', 'measurement_name'], inplace=True)
-		DUT_time_resolution = (jitter_df['Jitter (s) ufloat']**2-reference_signal_time_resolution_ufloat**2)**.5
-		DUT_time_resolution.rename(f'Time resolution (s) ufloat', inplace=True)
-		DUT_time_resolution_df = DUT_time_resolution.to_frame()
-		DUT_time_resolution_df[f'Time resolution (s)'] = DUT_time_resolution_df[f'Time resolution (s) ufloat'].apply(lambda x: x.nominal_value)
-		DUT_time_resolution_df[f'Time resolution (s) error'] = DUT_time_resolution_df[f'Time resolution (s) ufloat'].apply(lambda x: x.std_dev)
-		DUT_time_resolution_df.drop(columns=f'Time resolution (s) ufloat', inplace=True)
-		DUT_time_resolution_df['signal_name'] = DUT_signal_name
+	with bureaucrat.handle_task('time_resolution_DUT_and_reference') as employee:
+		jitter = pandas.read_pickle(bureaucrat.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.pickle')
 		
-		reference_signal_time_resolution_df = pandas.DataFrame(
+		if reference_signal_name not in jitter['signals_names']:
+			raise RuntimeError(f'Cannot find reference signal name within the measured signals...')
+		
+		DUT_signal_name = set(jitter['signals_names']) - set([reference_signal_name])
+		if len(DUT_signal_name) != 1:
+			raise RuntimeError(f'Cannot find DUT signal name, check what is going on.')
+		DUT_signal_name = list(DUT_signal_name)[0]
+		
+		jitter = ufloat(jitter['Jitter (s)'], jitter['Jitter (s) error'])
+		reference_contribution = ufloat(reference_signal_time_resolution,reference_signal_time_resolution_error)
+		
+		DUT_time_resolution = (jitter**2-reference_contribution**2)**.5
+		
+		DUT_time_resolution = pandas.Series(
+			{
+				'Time resolution (s)': DUT_time_resolution.nominal_value,
+				'Time resolution (s) error': DUT_time_resolution.std_dev,
+				'signal_name': DUT_signal_name,
+			}
+		)
+		reference_time_resolution = pandas.Series(
 			{
 				'Time resolution (s)': reference_signal_time_resolution,
 				'Time resolution (s) error': reference_signal_time_resolution_error,
 				'signal_name': reference_signal_name,
-			},
-			index = DUT_time_resolution_df.index,
-		)
-		for df in [DUT_time_resolution_df, reference_signal_time_resolution_df]:
-			df.set_index('signal_name', append=True, inplace=True)
-		
-		time_resolution_df = pandas.concat([reference_signal_time_resolution_df, DUT_time_resolution_df])
-		
-		time_resolution_df.to_csv(Norbertos_employee.path_to_directory_of_my_task/'time_resolution.csv')
-		
-		fig = px.line(
-			time_resolution_df.sort_index(level='Bias voltage (V)').reset_index(drop=False),
-			x = 'Bias voltage (V)',
-			y = f'Time resolution (s)',
-			error_y = f'Time resolution (s) error',
-			color = 'signal_name',
-			markers = True,
-			title = f'Time resolution vs bias voltage<br><sup>Run: {Norberto.run_name}</sup>',
-		)
-		fig.update_traces(error_y = dict(width = 1, thickness = .8))
-		fig.write_html(
-			str(Norbertos_employee.path_to_directory_of_my_task/'time_resolution_vs_bias_voltage.html'),
-			include_plotlyjs = 'cdn',
-		)
-
-def time_resolution_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat):
-	Nicanor = bureaucrat
-	
-	Nicanor.check_these_tasks_were_run_successfully('automatic_beta_scans')
-	
-	with Nicanor.handle_task('time_resolution_vs_bias_voltage_comparison') as Nicanors_employee:
-		time_resolutions = []
-		for Raúl in Nicanors_employee.list_subruns_of_task('automatic_beta_scans'):
-			Raúl.check_these_tasks_were_run_successfully('time_resolution_vs_bias_voltage_DUT_and_reference_trigger')
-			submeasurement_time_resolution = pandas.read_csv(Raúl.path_to_directory_of_task('time_resolution_vs_bias_voltage_DUT_and_reference_trigger')/'time_resolution.csv')
-			submeasurement_time_resolution['beta_scan_vs_bias_voltage'] = Raúl.run_name
-			time_resolutions.append(submeasurement_time_resolution)
-		df = pandas.concat(time_resolutions, ignore_index=True)
-		
-		df.to_csv(Nicanors_employee.path_to_directory_of_my_task/'time_resolution.csv', index=False)
-		
-		df['measurement_timestamp'] = df['beta_scan_vs_bias_voltage'].apply(lambda x: x.split('_')[0])
-		fig = px.line(
-			df.sort_values(['measurement_timestamp','Bias voltage (V)','signal_name']),
-			x = 'Bias voltage (V)',
-			y = 'Time resolution (s)',
-			error_y = 'Time resolution (s) error',
-			color = 'measurement_timestamp',
-			facet_col = 'signal_name',
-			markers = True,
-			title = f'Time resolution comparison<br><sup>Run: {Nicanor.run_name}</sup>',
-			hover_data = ['beta_scan_vs_bias_voltage','measurement_name'],
-			labels = {
-				'measurement_name': 'Beta scan',
-				'beta_scan_vs_bias_voltage': 'Beta scan vs bias voltage',
-				'measurement_timestamp': 'Measurement timestamp',
 			}
 		)
+		time_resolution = pandas.DataFrame.from_records([DUT_time_resolution,reference_time_resolution])
+		time_resolution.set_index('signal_name',inplace=True)
+		time_resolution.to_pickle(employee.path_to_directory_of_my_task/'time_resolution.pickle')
+
+def read_time_resolution(bureaucrat:RunBureaucrat):
+	if bureaucrat.was_task_run_successfully('beta_scan'):
+		bureaucrat.check_these_tasks_were_run_successfully('time_resolution_DUT_and_reference')
+		return pandas.read_pickle(bureaucrat.path_to_directory_of_task('time_resolution_DUT_and_reference')/'time_resolution.pickle')
+	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+		time_resolution = []
+		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			_ = read_time_resolution(subrun)
+			_['run_name'] = subrun.run_name
+			_.set_index('run_name',inplace=True,append=True)
+			time_resolution.append(_)
+		time_resolution = pandas.concat(time_resolution)
+		return time_resolution
+	else:
+		raise RuntimeError(f'Dont know how to read the time resolution in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}')
+
+def time_resolution_DUT_and_reference_vs_bias_voltage(bureaucrat:RunBureaucrat, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float, force:bool=False):
+	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	with bureaucrat.handle_task('time_resolution_DUT_and_reference_vs_bias_voltage') as employee:
+		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			time_resolution_DUT_and_reference(
+				bureaucrat = subrun,
+				reference_signal_name = reference_signal_name,
+				reference_signal_time_resolution = reference_signal_time_resolution,
+				reference_signal_time_resolution_error = reference_signal_time_resolution_error,
+			)
+		
+		time_resolution = read_time_resolution(bureaucrat)
+		
+		if "DUT" not in time_resolution.index.get_level_values('signal_name'):
+			raise RuntimeError(f'Cannot find "DUT" signal within the calculated time resolution data...')
+		time_resolution = time_resolution.query('signal_name=="DUT"')
+		
+		summary = read_summarized_data(bureaucrat)
+		summary.columns = [f'{col[0]} {col[1]}' for col in summary.columns]
+		
+		time_resolution.reset_index(level='signal_name', inplace=True, drop=True)
+		summary.reset_index(level='device_name', inplace=True)
+		
+		time_resolution.to_pickle(employee.path_to_directory_of_my_task/'time_resolution.pickle')
+		
+		fig = px.line(
+			title = f'Time resolution vs bias voltage with beta source<br><sup>Run: {bureaucrat.run_name}</sup>',
+			data_frame = time_resolution.join(summary).sort_values('Bias voltage (V) mean'),
+			x = 'Bias voltage (V) mean',
+			y = 'Time resolution (s)',
+			error_x = 'Bias voltage (V) std',
+			error_y = 'Time resolution (s) error',
+			markers = True,
+		)
+		fig.update_layout(xaxis = dict(autorange = "reversed"))
 		fig.write_html(
-			str(Nicanors_employee.path_to_directory_of_my_task/'time_resolution_vs_bias_voltage_comparison.html'),
+			str(employee.path_to_directory_of_my_task/'time_resolution_vs_bias_voltage.html'),
 			include_plotlyjs = 'cdn',
 		)
 
 def script_core(bureaucrat:RunBureaucrat):
-	REFERENCE_SIGNAL_TIME_RESOLUTION = 17.32e-12 # My best characterization of the Photonis PMT.
-	REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR = 2.16e-12 # My best characterization of the Photonis PMT.
-	REFERENCE_SIGNAL_NAME = 'MCP-PMT'
-	
-	Manuel = bureaucrat
-	if Manuel.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
-		time_resolution_vs_bias_voltage_DUT_and_reference_trigger(
-			bureaucrat = Manuel,
+	if bureaucrat.was_task_run_successfully('beta_scan'):
+		time_resolution_DUT_and_reference(
+			bureaucrat = bureaucrat,
 			reference_signal_name = REFERENCE_SIGNAL_NAME,
 			reference_signal_time_resolution = REFERENCE_SIGNAL_TIME_RESOLUTION,
 			reference_signal_time_resolution_error = REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR,
 		)
-	elif Manuel.was_task_run_successfully('automatic_beta_scans'):
-		for b in Manuel.list_subruns_of_task('automatic_beta_scans'):
-			time_resolution_vs_bias_voltage_DUT_and_reference_trigger(
-				bureaucrat = b,
-				reference_signal_name = REFERENCE_SIGNAL_NAME,
-				reference_signal_time_resolution = REFERENCE_SIGNAL_TIME_RESOLUTION,
-				reference_signal_time_resolution_error = REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR,
-			)
-		time_resolution_vs_bias_voltage_comparison(Manuel)
+	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+		time_resolution_DUT_and_reference_vs_bias_voltage(
+			bureaucrat = bureaucrat,
+			reference_signal_name = REFERENCE_SIGNAL_NAME,
+			reference_signal_time_resolution = REFERENCE_SIGNAL_TIME_RESOLUTION,
+			reference_signal_time_resolution_error = REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR,
+		)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(Manuel.run_name)} located in {Manuel.path_to_run_directory}.')
 
@@ -143,4 +137,5 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	script_core(RunBureaucrat(Path(args.directory)))
+	
+	script_core(bureaucrat = RunBureaucrat(Path(args.directory)))
