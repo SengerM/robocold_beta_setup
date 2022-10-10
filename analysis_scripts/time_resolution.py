@@ -6,8 +6,7 @@ import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
 from uncertainties import ufloat
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 from summarize_parameters import read_summarized_data
-
-grafica.plotly_utils.utils.set_my_template_as_default()
+from collected_charge import read_collected_charge
 
 REFERENCE_SIGNAL_TIME_RESOLUTION = 17.32e-12 # My best characterization of the Photonis PMT.
 REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR = 2.16e-12 # My best characterization of the Photonis PMT.
@@ -126,6 +125,8 @@ def script_core(bureaucrat:RunBureaucrat):
 
 if __name__ == '__main__':
 	import argparse
+	
+	grafica.plotly_utils.utils.set_my_template_as_default()
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--dir',

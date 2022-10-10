@@ -16,7 +16,6 @@ import multiprocessing
 from summarize_parameters import read_summarized_data
 
 N_BOOTSTRAP = 99
-grafica.plotly_utils.utils.set_my_template_as_default()
 
 def draw_langauss_fit(fig, popt, x_values:numpy.array, color:str, name:str, normalization_coefficient:float=1, **kwargs):
 	fig.add_trace(
@@ -227,6 +226,8 @@ def script_core(bureaucrat:RunBureaucrat, force:bool):
 
 if __name__ == '__main__':
 	import argparse
+	
+	grafica.plotly_utils.utils.set_my_template_as_default()
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--dir',
