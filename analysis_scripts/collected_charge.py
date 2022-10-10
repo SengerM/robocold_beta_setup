@@ -13,6 +13,7 @@ from jitter_calculation import resample_measured_data
 from grafica.plotly_utils.utils import scatter_histogram # https://github.com/SengerM/grafica
 import warnings
 import multiprocessing
+from summarize_parameters import read_summarized_data
 
 N_BOOTSTRAP = 99
 grafica.plotly_utils.utils.set_my_template_as_default()
@@ -143,7 +144,7 @@ def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
 				}
 			)
 		collected_charge_final_results_df = pandas.DataFrame(collected_charge_final_results).set_index('signal_name')
-		collected_charge_final_results_df.to_csv(task_handler.path_to_directory_of_my_task/'collected_charge.csv')
+		collected_charge_final_results_df.to_pickle(task_handler.path_to_directory_of_my_task/'collected_charge.pickle')
 
 def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
 	Romina = bureaucrat
@@ -159,27 +160,43 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 	
 	with Romina.handle_task('collected_charge_vs_bias_voltage') as task_handler:
 		collected_charges = []
+		summary = []
 		for Raúl in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
-			submeasurement_charge = pandas.read_csv(Raúl.path_to_directory_of_task('collected_charge_in_beta_scan')/'collected_charge.csv')
-			submeasurement_charge['measurement_name'] = Raúl.run_name
-			submeasurement_charge['Bias voltage (V)'] = float(Raúl.run_name.split('_')[-1].replace('V',''))
+			Raúl.check_these_tasks_were_run_successfully(['collected_charge_in_beta_scan','summarize_beta_scan_measured_stuff'])
+			submeasurement_charge = pandas.read_pickle(Raúl.path_to_directory_of_task('collected_charge_in_beta_scan')/'collected_charge.pickle')
+			submeasurement_charge['run_name'] = Raúl.run_name
+			submeasurement_charge.set_index('run_name',append=True,inplace=True)
 			collected_charges.append(submeasurement_charge)
-		collected_charge_df = pandas.concat(collected_charges, ignore_index=True)
+		collected_charge = pandas.concat(collected_charges)
+		collected_charge = collected_charge.query('signal_name=="DUT"')
 		
-		collected_charge_df.to_csv(
-			task_handler.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage.csv',
-			index = False,
-		)
+		summary = read_summarized_data(bureaucrat)
+		summary.columns = [f'{col[0]} {col[1]}' for col in summary.columns]
+		
+		measured_device = set(summary.index.get_level_values('device_name'))
+		if len(measured_device) != 1:
+			raise RuntimeError(f'I was expecting only a single device measured, but found {len(measured_device)} devices measured, check this!')
+		measured_device = list(measured_device)[0]
+		
+		collected_charge.reset_index(level='signal_name',drop=True,inplace=True)
+		summary.reset_index(level='device_name',drop=True,inplace=True)
+		
+		collected_charge.to_pickle(task_handler.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage.pickle')
+		
+		plot_this = collected_charge.join(summary)
+		plot_this['device_name'] = measured_device
 		
 		fig = px.line(
-			collected_charge_df.sort_values(['Bias voltage (V)','signal_name']),
-			x = 'Bias voltage (V)',
+			title = f'Collected charge vs bias voltage<br><sup>Run: {Romina.run_name}</sup>',
+			data_frame = plot_this.sort_values('Bias voltage (V) mean'),
+			x = 'Bias voltage (V) mean',
 			y = 'Collected charge (V s)',
 			error_y = 'Collected charge (V s) error',
-			color = 'signal_name',
-			title = f'Collected charge vs bias voltage<br><sup>Run: {Romina.run_name}</sup>',
+			error_x = 'Bias voltage (V) std',
 			markers = True,
+			hover_data = ['device_name'],
 		)
+		fig.update_layout(xaxis = dict(autorange = "reversed"))
 		fig.write_html(
 			str(task_handler.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage.html'),
 			include_plotlyjs = 'cdn',
