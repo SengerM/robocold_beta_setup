@@ -146,6 +146,22 @@ def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
 		collected_charge_final_results_df = pandas.DataFrame(collected_charge_final_results).set_index('signal_name')
 		collected_charge_final_results_df.to_pickle(task_handler.path_to_directory_of_my_task/'collected_charge.pickle')
 
+def read_collected_charge(bureaucrat:RunBureaucrat):
+	if bureaucrat.was_task_run_successfully('beta_scan'):
+		bureaucrat.check_these_tasks_were_run_successfully('collected_charge_in_beta_scan')
+		return pandas.read_pickle(bureaucrat.path_to_directory_of_task('collected_charge_in_beta_scan')/'collected_charge.pickle')
+	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+		charge = []
+		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			_ = read_collected_charge(subrun)
+			_['run_name'] = subrun.run_name
+			_.set_index('run_name',inplace=True,append=True)
+			charge.append(_)
+		charge = pandas.concat(charge)
+		return charge
+	else:
+		raise RuntimeError(f'Dont know how to read the collected charge in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}')
+
 def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
 	Romina = bureaucrat
 	
@@ -159,15 +175,10 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 				[(bur,frc) for bur,frc in zip(subruns, [force_calculation_on_submeasurements]*len(subruns))]
 			)
 		
-		collected_charges = []
-		summary = []
-		for Raúl in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
-			Raúl.check_these_tasks_were_run_successfully(['collected_charge_in_beta_scan','summarize_beta_scan_measured_stuff'])
-			submeasurement_charge = pandas.read_pickle(Raúl.path_to_directory_of_task('collected_charge_in_beta_scan')/'collected_charge.pickle')
-			submeasurement_charge['run_name'] = Raúl.run_name
-			submeasurement_charge.set_index('run_name',append=True,inplace=True)
-			collected_charges.append(submeasurement_charge)
-		collected_charge = pandas.concat(collected_charges)
+		collected_charge = read_collected_charge(bureaucrat)
+		
+		if "DUT" not in collected_charge.index.get_level_values('signal_name'):
+			raise RuntimeError(f'Cannot find "DUT" signal within the calculated charge data...')
 		collected_charge = collected_charge.query('signal_name=="DUT"')
 		
 		summary = read_summarized_data(bureaucrat)
@@ -202,63 +213,17 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 			include_plotlyjs = 'cdn',
 		)
 
-def collected_charge_vs_bias_voltage_comparison(bureaucrat:RunBureaucrat):
-	Spencer = bureaucrat
-	
-	Spencer.check_these_tasks_were_run_successfully('automatic_beta_scans')
-	
-	with Spencer.handle_task('collected_charge_vs_bias_voltage_comparison') as Spencers_employee:
-		collected_charges = []
-		for Raúl in Spencers_employee.list_subruns_of_task('automatic_beta_scans'):
-			submeasurement_charge_vs_bias_voltage = pandas.read_csv(Raúl.path_to_directory_of_task('collected_charge_vs_bias_voltage')/'collected_charge_vs_bias_voltage.csv')
-			submeasurement_charge_vs_bias_voltage['beta_scan_vs_bias_voltage'] = Raúl.run_name
-			collected_charges.append(submeasurement_charge_vs_bias_voltage)
-		df = pandas.concat(collected_charges, ignore_index=True)
-		
-		df.to_csv(Spencers_employee.path_to_directory_of_my_task/'collected_charge.csv', index=False)
-		
-		df['measurement_timestamp'] = df['beta_scan_vs_bias_voltage'].apply(lambda x: x.split('_')[0])
-		fig = px.line(
-			df.sort_values(['measurement_timestamp','Bias voltage (V)','signal_name']),
-			x = 'Bias voltage (V)',
-			y = 'Collected charge (V s)',
-			error_y = 'Collected charge (V s) error',
-			color = 'measurement_timestamp',
-			facet_col = 'signal_name',
-			markers = True,
-			title = f'Collected charge comparison<br><sup>Run: {Spencer.run_name}</sup>',
-			hover_data = ['beta_scan_vs_bias_voltage','measurement_name'],
-			labels = {
-				'measurement_name': 'Beta scan',
-				'beta_scan_vs_bias_voltage': 'Beta scan vs bias voltage',
-				'measurement_timestamp': 'Measurement timestamp',
-			}
-		)
-		fig.write_html(
-			str(Spencers_employee.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage_comparison.html'),
-			include_plotlyjs = 'cdn',
-		)
-
 def script_core(bureaucrat:RunBureaucrat, force:bool):
-	Manuel = bureaucrat
-	if Manuel.was_task_run_successfully('automatic_beta_scans'):
-		for b in Manuel.list_subruns_of_task('automatic_beta_scans'):
-			collected_charge_vs_bias_voltage(
-				bureaucrat = b,
-				force_calculation_on_submeasurements = force,
-				number_of_processes = max(multiprocessing.cpu_count()-1,1)
-			)
-		collected_charge_vs_bias_voltage_comparison(Manuel)
-	elif Manuel.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		collected_charge_vs_bias_voltage(
-			bureaucrat = Manuel,
+			bureaucrat = bureaucrat,
 			force_calculation_on_submeasurements = force,
 			number_of_processes = max(multiprocessing.cpu_count()-1,1)
 		)
-	elif Manuel.was_task_run_successfully('beta_scan'):
-		collected_charge_in_beta_scan(Manuel, force=True)
+	elif bureaucrat.was_task_run_successfully('beta_scan'):
+		collected_charge_in_beta_scan(bureaucrat, force=True)
 	else:
-		raise RuntimeError(f'Dont know how to process run {repr(Manuel.run_name)} located in `{Manuel.path_to_run_directory}`...')
+		raise RuntimeError(f'Dont know how to process run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}...')
 
 if __name__ == '__main__':
 	import argparse
