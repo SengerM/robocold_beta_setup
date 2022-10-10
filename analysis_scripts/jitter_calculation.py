@@ -11,6 +11,7 @@ from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github
 import shutil
 from clean_beta_scan import tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan
 import multiprocessing
+from summarize_parameters import read_summarized_data
 
 N_BOOTSTRAP = 99
 STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION = 'sigma_from_gaussian_fit' # For the time resolution I will use the `sigma_from_gaussian_fit` because in practice ends up being the most robust and reliable of all.
@@ -270,6 +271,7 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 			)
 			data_df = tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(Norberto, data_df).query('is_background==False').drop(columns='is_background')
 		
+		# I always expect that there are only two measured signals from the beta setup, let's check it:
 		set_of_measured_signals = set(data_df.index.get_level_values('signal_name'))
 		if len(set_of_measured_signals) == 2:
 			signal_names = set_of_measured_signals
@@ -362,16 +364,17 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 					include_plotlyjs = 'cdn',
 				)
 
-		jitter_results_df = pandas.DataFrame.from_records(jitter_results)
-		df = jitter_results_df.set_index('measured_on')
+		jitter_results = pandas.DataFrame.from_records(jitter_results)
+		jitter_results.set_index('measured_on', inplace=True)
 		
 		jitter = pandas.Series(
 			{
-				'Jitter (s)': df.loc['real data','Jitter (s)'],
-				'Jitter (s) error': df['Jitter (s)'].std(),
+				'Jitter (s)': jitter_results.loc['real data','Jitter (s)'],
+				'Jitter (s) error': jitter_results['Jitter (s)'].std(),
+				'signals_names': tuple(sorted(set_of_measured_signals)),
 			}
 		)
-		jitter.to_csv(Norbertos_employee.path_to_directory_of_my_task/'jitter.csv', header=False)
+		jitter.to_pickle(Norbertos_employee.path_to_directory_of_my_task/'jitter.pickle')
 		
 		fig = go.Figure()
 		fig.update_layout(
@@ -381,7 +384,7 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 		)
 		fig.add_trace(
 			scatter_histogram(
-				samples = df.loc['resampled data','Jitter (s)'],
+				samples = jitter_results.loc['resampled data','Jitter (s)'],
 				name = 'Bootstrapped jitter replicas',
 				error_y = dict(type='auto'),
 			)
@@ -409,38 +412,52 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 	
 	Norberto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
-	subruns = Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
-	with multiprocessing.Pool(number_of_processes) as p:
-		p.starmap(
-			jitter_calculation_beta_scan,
-			[(bur,thrshld,frc) for bur,thrshld,frc in zip(subruns, [CFD_thresholds]*len(subruns), [force_calculation_on_submeasurements]*len(subruns))]
-		)
-	
 	with Norberto.handle_task('jitter_calculation_beta_scan_sweeping_voltage') as Norbertos_employee:
-		jitters = []
-		for Raúl in Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
-			submeasurement_jitter = pandas.read_csv(
-				Raúl.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.csv',
-				names = ['variable_name','value'],
+		subruns = Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
+		with multiprocessing.Pool(number_of_processes) as p:
+			p.starmap(
+				jitter_calculation_beta_scan,
+				[(bur,thrshld,frc) for bur,thrshld,frc in zip(subruns, [CFD_thresholds]*len(subruns), [force_calculation_on_submeasurements]*len(subruns))]
 			)
-			submeasurement_jitter.set_index('variable_name', inplace=True)
-			submeasurement_jitter = submeasurement_jitter['value']
-			submeasurement_jitter['measurement_name'] = Raúl.run_name
-			submeasurement_jitter['Bias voltage (V)'] = float(Raúl.run_name.split('_')[-1].replace('V',''))
-			jitters.append(submeasurement_jitter)
 		
-		jitter_df = pandas.DataFrame.from_records(jitters)
-		jitter_df.columns.rename('', inplace=True)
-		jitter_df.to_csv(Norbertos_employee.path_to_directory_of_my_task/'jitter_vs_bias_voltage.csv', index=False)
+		jitter = []
+		for Raúl in Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			Raúl.check_these_tasks_were_run_successfully(['jitter_calculation_beta_scan','summarize_beta_scan_measured_stuff'])
+			_ = pandas.read_pickle(Raúl.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.pickle')
+			_['measurement_name'] = Raúl.run_name
+			jitter.append(_)
+		jitter = pandas.DataFrame.from_records(jitter)
+		jitter.set_index('measurement_name',drop=True,inplace=True)
+		
+		signals_names = set(jitter['signals_names'])
+		if len(signals_names) != 1 or len(list(signals_names)[0]) != 2:
+			raise RuntimeError(f'There is a weird error with the signals, check this!')
+		signals_names = list(signals_names)[0]
+		
+		jitter.drop(columns='signals_names',inplace=True)
+		
+		summary = read_summarized_data(bureaucrat)
+		summary.columns = [f'{col[0]} {col[1]}' for col in summary.columns]
+		
+		measured_device = set(summary.index.get_level_values('device_name'))
+		if len(measured_device) != 1:
+			raise RuntimeError(f'I was expecting only a single device measured, but found {len(measured_device)} devices measured, check this!')
+		measured_device = list(measured_device)[0]
+		
+		summary.reset_index(level='device_name', inplace=True, drop=False)
+		
+		jitter.to_pickle(Norbertos_employee.path_to_directory_of_my_task/'jitter.pickle')
 		
 		fig = px.line(
-			jitter_df.sort_values('Bias voltage (V)'),
-			x = 'Bias voltage (V)',
+			title = f'Jitter vs bias voltage<br><sup>Run: {Norberto.run_name}</sup>',
+			data_frame = jitter.join(summary).sort_values('Bias voltage (V) mean'),
+			x = 'Bias voltage (V) mean',
 			y = 'Jitter (s)',
 			error_y = 'Jitter (s) error',
+			error_x = 'Bias voltage (V) std',
 			markers = True,
-			title = f'Jitter vs bias voltage<br><sup>Run: {Norberto.run_name}</sup>',
 		)
+		fig.update_layout(xaxis = dict(autorange = "reversed"))
 		fig.write_html(
 			str(Norbertos_employee.path_to_directory_of_my_task/'jitter_vs_bias_voltage.html'),
 			include_plotlyjs = 'cdn',
