@@ -59,7 +59,7 @@ def binned_fit_langauss(samples, bins='auto', nan_policy='drop', maxfev=0):
 		lambda x, mpv, xi, sigma: langauss.pdf(x, mpv, xi, sigma),
 		xdata = bin_centers,
 		ydata = hist,
-		p0 = [p*((np.random.rand()-.5)*.2+1) for p in [landau_x_mpv_guess, landau_xi_guess, gauss_sigma_guess]], # I am multiplying by this random number just for those cases in which it cannot converge by default, this introduces some noise that helps making it to converge by just running it another time.
+		p0 = [p*((np.random.rand()-.5)*.1+1) for p in [landau_x_mpv_guess, landau_xi_guess, gauss_sigma_guess]], # I am multiplying by this random number just for those cases in which it cannot converge by default, this introduces some noise that helps making it to converge by just running it another time.
 		absolute_sigma = True,
 		maxfev = maxfev,
 		# ~ bounds = ([0]*3, [float('inf')]*3), # Don't know why setting the limits make this to fail.
