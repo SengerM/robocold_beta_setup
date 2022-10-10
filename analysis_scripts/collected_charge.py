@@ -151,14 +151,14 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 	
 	Romina.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
-	subruns = Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
-	with multiprocessing.Pool(number_of_processes) as p:
-		p.starmap(
-			collected_charge_in_beta_scan,
-			[(bur,frc) for bur,frc in zip(subruns, [force_calculation_on_submeasurements]*len(subruns))]
-		)
-	
 	with Romina.handle_task('collected_charge_vs_bias_voltage') as task_handler:
+		subruns = Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
+		with multiprocessing.Pool(number_of_processes) as p:
+			p.starmap(
+				collected_charge_in_beta_scan,
+				[(bur,frc) for bur,frc in zip(subruns, [force_calculation_on_submeasurements]*len(subruns))]
+			)
+		
 		collected_charges = []
 		summary = []
 		for Raúl in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
