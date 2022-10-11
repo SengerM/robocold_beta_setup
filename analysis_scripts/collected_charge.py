@@ -14,8 +14,19 @@ from grafica.plotly_utils.utils import scatter_histogram # https://github.com/Se
 import warnings
 import multiprocessing
 from summarize_parameters import read_summarized_data
+from uncertainties import ufloat
 
 N_BOOTSTRAP = 99
+
+TRANSIMPEDANCE_OHM_VALUE = 7.337e3 # This number comes from the `20220921000000_test_beam_CERN/20220925_3TIs_1PIN/test_beam_data/subruns/20220925235149_TI107_vs_TI108_plus_PIN_that_works_triggering_on_TI113`
+TRANSIMPEDANCE_OHM_ERROR = 0.055e3 # This number comes from the `20220921000000_test_beam_CERN/20220925_3TIs_1PIN/test_beam_data/subruns/20220925235149_TI107_vs_TI108_plus_PIN_that_works_triggering_on_TI113`
+TRANSIMPEDANCE = pandas.DataFrame(
+	{
+		'Transimpedance (Ω)': [TRANSIMPEDANCE_OHM_VALUE],
+		'Transimpedance (Ω) error': [TRANSIMPEDANCE_OHM_ERROR],
+		'signal_name': ['DUT'],
+	}
+).set_index('signal_name')
 
 def draw_langauss_fit(fig, popt, x_values:numpy.array, color:str, name:str, normalization_coefficient:float=1, **kwargs):
 	fig.add_trace(
@@ -37,7 +48,7 @@ def draw_langauss_fit(fig, popt, x_values:numpy.array, color:str, name:str, norm
 		)
 	)
 
-def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
+def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, transimpedance:pandas.DataFrame=None, force:bool=False):
 	Norberto = bureaucrat
 	
 	Norberto.check_these_tasks_were_run_successfully('beta_scan')
@@ -143,6 +154,23 @@ def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, force:bool=False):
 				}
 			)
 		collected_charge_final_results_df = pandas.DataFrame(collected_charge_final_results).set_index('signal_name')
+		
+		if transimpedance is not None:
+			if not isinstance(transimpedance, pandas.DataFrame):
+				raise TypeError(f'`transimpedance` must be a pandas data frame.')
+			if not 'signal_name' in transimpedance.index.names:
+				raise ValueError(f'`transimpedance` must have the column `signal_name` as index.')
+			
+			transimpedance['Transimpedance (Ω) ufloat'] = transimpedance[['Transimpedance (Ω)','Transimpedance (Ω) error']].apply(lambda x: ufloat(x['Transimpedance (Ω)'], x['Transimpedance (Ω) error']),axis=1)
+			collected_charge_final_results_df['Collected charge (V s) ufloat'] = collected_charge_final_results_df[['Collected charge (V s)','Collected charge (V s) error']].apply(lambda x: ufloat(x['Collected charge (V s)'], x['Collected charge (V s) error']),axis=1)
+			
+			collected_charge_final_results_df['Collected charge (C) ufloat'] = collected_charge_final_results_df['Collected charge (V s) ufloat']/transimpedance['Transimpedance (Ω) ufloat']
+			
+			collected_charge_final_results_df['Collected charge (C)'] = collected_charge_final_results_df['Collected charge (C) ufloat'].apply(lambda x: x.nominal_value)
+			collected_charge_final_results_df['Collected charge (C) error'] = collected_charge_final_results_df['Collected charge (C) ufloat'].apply(lambda x: x.std_dev)
+			
+			collected_charge_final_results_df.drop(columns=[col for col in collected_charge_final_results_df.columns if 'ufloat' in col], inplace=True)
+		
 		collected_charge_final_results_df.to_pickle(task_handler.path_to_directory_of_my_task/'collected_charge.pickle')
 
 def read_collected_charge(bureaucrat:RunBureaucrat):
@@ -161,7 +189,7 @@ def read_collected_charge(bureaucrat:RunBureaucrat):
 	else:
 		raise RuntimeError(f'Dont know how to read the collected charge in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}')
 
-def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
+def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, transimpedance:pandas.DataFrame=None, force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
 	Romina = bureaucrat
 	
 	Romina.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
@@ -171,7 +199,7 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 		with multiprocessing.Pool(number_of_processes) as p:
 			p.starmap(
 				collected_charge_in_beta_scan,
-				[(bur,frc) for bur,frc in zip(subruns, [force_calculation_on_submeasurements]*len(subruns))]
+				[(bur,trnsmpdnc,frc) for bur,trnsmpdnc,frc in zip(subruns, [transimpedance]*len(subruns), [force_calculation_on_submeasurements]*len(subruns))]
 			)
 		
 		collected_charge = read_collected_charge(bureaucrat)
@@ -211,16 +239,38 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation
 			str(task_handler.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage.html'),
 			include_plotlyjs = 'cdn',
 		)
+		
+		if 'Collected charge (C)' in plot_this.columns:
+			fig = px.line(
+				title = f'Collected charge (coulomb) vs bias voltage<br><sup>Run: {Romina.run_name}</sup>',
+				data_frame = plot_this.sort_values('Bias voltage (V) mean'),
+				x = 'Bias voltage (V) mean',
+				y = 'Collected charge (C)',
+				error_y = 'Collected charge (C) error',
+				error_x = 'Bias voltage (V) std',
+				markers = True,
+				hover_data = ['device_name'],
+			)
+			fig.update_layout(xaxis = dict(autorange = "reversed"))
+			fig.write_html(
+				str(task_handler.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage_coulomb.html'),
+				include_plotlyjs = 'cdn',
+			)
 
 def script_core(bureaucrat:RunBureaucrat, force:bool):
 	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		collected_charge_vs_bias_voltage(
 			bureaucrat = bureaucrat,
 			force_calculation_on_submeasurements = force,
+			transimpedance = TRANSIMPEDANCE,
 			number_of_processes = max(multiprocessing.cpu_count()-1,1)
 		)
 	elif bureaucrat.was_task_run_successfully('beta_scan'):
-		collected_charge_in_beta_scan(bureaucrat, force=True)
+		collected_charge_in_beta_scan(
+			bureaucrat,
+			force = True,
+			transimpedance = TRANSIMPEDANCE,
+		)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}...')
 
