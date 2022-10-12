@@ -96,7 +96,7 @@ def plot_waveform(signal):
 			pass
 	return fig
 
-def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False)->Path:
+def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False):
 	"""Perform a beta scan.
 	
 	Parameters
@@ -142,7 +142,6 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 		telegram_chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
 	)
 	
-	
 	if not silent:
 		print('Waiting for acquiring control of the hardware...')
 	with the_setup.hold_signal_acquisition(who=name_to_access_to_the_setup), the_setup.hold_control_of_bias_for_slot_number(slot_number, who=name_to_access_to_the_setup), the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
@@ -151,7 +150,11 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 		with John.handle_task('beta_scan') as beta_scan_task_bureaucrat:
 			with open(beta_scan_task_bureaucrat.path_to_directory_of_my_task/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
-			with SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('measured_stuff.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as measured_stuff_dumper, SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as waveforms_dumper, SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as parsed_from_waveforms_dumper:
+			the_setup.get_slots_configuration_df().to_csv(beta_scan_task_bureaucrat.path_to_directory_of_my_task/'slots_configuration.csv')
+			with SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('measured_stuff.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as measured_stuff_dumper, \
+				SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as waveforms_dumper, \
+				SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as parsed_from_waveforms_dumper \
+			:
 				if not silent:
 					print(f'Moving beta source to slot number {slot_number}...')
 				the_setup.move_to_slot(slot_number, who=name_to_access_to_the_setup)
@@ -228,7 +231,7 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 	if not silent:
 		print('Beta scan finished.')
 
-def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers_per_voltage:list, bias_voltages:list, software_triggers:list=None, silent=False)->Path:
+def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers_per_voltage:list, bias_voltages:list, software_triggers:list=None, silent=False):
 	"""Perform multiple beta scans at different bias voltages each.
 	
 	Parameters
@@ -295,7 +298,6 @@ def automatic_beta_scans(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:s
 	"""Perform automatic beta scans.
 	"""
 	the_setup = connect_me_with_the_setup()
-	slots_to_measure = sorted(set(beta_scans_configuration_df.index.get_level_values('slot_number')))
 	Ramona = bureaucrat
 	with Ramona.handle_task('automatic_beta_scans', drop_old_data=False) as Ramonas_employee:
 		if not silent:
@@ -303,7 +305,7 @@ def automatic_beta_scans(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:s
 		with the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
 			if not silent:
 				print('Control of Robocold acquired!')
-			for slot_number in slots_to_measure:
+			for slot_number in beta_scans_configuration_df.index.unique():
 				if not silent:
 					print(f'Reseting robocold...')
 				the_setup.reset_robocold(who=name_to_access_to_the_setup)
@@ -339,16 +341,19 @@ if __name__=='__main__':
 	def software_trigger(signals_dict, minimum_DUT_amplitude:float):
 		DUT_signal = signals_dict['DUT']
 		PMT_signal = signals_dict['MCP-PMT']
-		is_peak_in_correct_time_window = 0 < DUT_signal.peak_start_time - PMT_signal.peak_start_time < 7e-9 
+		try:
+			is_peak_in_correct_time_window = 1e-9 < float(DUT_signal.find_time_at_rising_edge(50)) - float(PMT_signal.find_time_at_rising_edge(50)) < 5.5e-9
+		except Exception:
+			is_peak_in_correct_time_window = False
 		is_DUT_amplitude_above_threshold = DUT_signal.amplitude > minimum_DUT_amplitude
 		return is_peak_in_correct_time_window and is_DUT_amplitude_above_threshold
 	
 	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
+	beta_scans_configuration_df = load_beta_scans_configuration()
+	beta_scans_configuration_df['software_trigger'] = lambda x: software_trigger(x, 0)
 	
 	with Alberto.handle_task('beta_scans', drop_old_data=False) as beta_scans_task_bureaucrat:
 		John = beta_scans_task_bureaucrat.create_subrun(create_a_timestamp() + '_' + input('Measurement name? ').replace(' ','_'))
-		beta_scans_configuration_df = load_beta_scans_configuration()
-		beta_scans_configuration_df['software_trigger'] = lambda x: software_trigger(x, 0)
 		automatic_beta_scans(
 			bureaucrat = John, 
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
