@@ -260,7 +260,13 @@ class TheRobocoldBetaSetup:
 		"""Returns the current compliance for the given slot number."""
 		caen_channel = self._caen_channel_given_slot_number(slot_number)
 		with self._caen_Lock:
-			return caen_channel.get('ISET')
+			return caen_channel.get('ISET')*1e-6
+	
+	def get_set_voltage(self, slot_number:int)->float:
+		"""Returns the value of the set voltage for the given slot number."""
+		caen_channel = self._caen_channel_given_slot_number(slot_number)
+		with self._caen_Lock:
+			return caen_channel.get('VSET')
 	
 	def set_bias_voltage_status(self, slot_number:int, status:str, who:str):
 		"""Turn on or off the bias voltage for the given slot.
@@ -283,6 +289,12 @@ class TheRobocoldBetaSetup:
 		caen_channel = self._caen_channel_given_slot_number(slot_number)
 		with self._bias_for_slot_Lock[slot_number](who), self._caen_Lock:
 			caen_channel.output = status
+	
+	def get_bias_voltage_status(self, slot_number:int):
+		"""Return 'on' or 'off'."""
+		caen_channel = self._caen_channel_given_slot_number(slot_number)
+		with self._caen_Lock:
+			return caen_channel.output
 	
 	# Signal acquiring -------------------------------------------------
 	
