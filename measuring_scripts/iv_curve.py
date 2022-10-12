@@ -7,8 +7,13 @@ from TheSetup import connect_me_with_the_setup
 from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper # https://github.com/SengerM/huge_dataframe
 import threading
 import warnings
+import sys 
+sys.path.append(str(Path.home()/'scripts_and_codes/repos/robocold_beta_setup/analysis_scripts'))
+from plot_iv_curves import plot_IV_curves_all_together
+from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
+import my_telegram_bots
 
-def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent=False)->Path:
+def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent=False, reporter:TelegramReporter=None):
 	"""Measure an IV curve.
 	Parameters
 	----------
@@ -26,17 +31,14 @@ def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n
 		The value for the current limit.
 	silent: bool, default False
 		If `True`, no progress messages are printed.
-	
-	Returns
-	-------
-	path_to_measurement_base_directory: Path
-		A path to the directory where the measurement's data was stored.
 	"""
 	
 	John = bureaucrat
 	John.create_run()
 	
 	the_setup = connect_me_with_the_setup()
+	
+	report_progress = reporter is not None
 	
 	if not silent:
 		print('Waiting for acquiring control of the hardware.')
@@ -81,6 +83,8 @@ def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n
 						measured_data_df.set_index(['n_voltage','n_measurement'], inplace=True)
 						measured_data_dumper.append(measured_data_df)
 						time.sleep(.5)
+						if report_progress:
+							reporter.update(1)
 	if not silent:
 		print(f'Finished measuring IV curve on slot {slot_number}...')
 
@@ -106,7 +110,7 @@ def measure_iv_curves_on_multiple_slots(bureaucrat:RunBureaucrat, voltages:dict,
 	"""
 	
 	class MeasureIVCurveThread(threading.Thread):
-		def __init__(self, bureaucrat:RunBureaucrat, slot_number:int, voltages_to_measure:list, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent:bool):
+		def __init__(self, bureaucrat:RunBureaucrat, slot_number:int, voltages_to_measure:list, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent:bool, reporter:TelegramReporter):
 			threading.Thread.__init__(self)
 			self.bureaucrat = bureaucrat
 			self.slot_number = slot_number
@@ -115,6 +119,7 @@ def measure_iv_curves_on_multiple_slots(bureaucrat:RunBureaucrat, voltages:dict,
 			self.n_measurements_per_voltage = n_measurements_per_voltage
 			self.current_compliance = current_compliance
 			self.silent = silent
+			self.reporter = reporter
 		def run(self):
 			measure_iv_curve(
 				bureaucrat = self.bureaucrat,
@@ -124,6 +129,7 @@ def measure_iv_curves_on_multiple_slots(bureaucrat:RunBureaucrat, voltages:dict,
 				n_measurements_per_voltage = self.n_measurements_per_voltage, 
 				current_compliance = self.current_compliance,
 				silent = self.silent,
+				reporter = self.reporter,
 			)
 	
 	Richard = bureaucrat
@@ -136,7 +142,14 @@ def measure_iv_curves_on_multiple_slots(bureaucrat:RunBureaucrat, voltages:dict,
 	
 	the_setup = connect_me_with_the_setup()
 	
-	with Richard.handle_task('measure_iv_curves_on_multiple_slots') as measure_iv_curves_on_multiple_slots_task_handler:
+	reporter = TelegramReporter(
+		telegram_token = my_telegram_bots.robobot.token, 
+		telegram_chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
+	)
+	
+	with Richard.handle_task('measure_iv_curves_on_multiple_slots') as measure_iv_curves_on_multiple_slots_task_handler, \
+		reporter.report_for_loop(sum([len(v) for _,v in voltages.items()])*n_measurements_per_voltage, bureaucrat.run_name) as reporter \
+	:
 		threads = []
 		for slot_number in set(voltages):
 			thread = MeasureIVCurveThread(
@@ -147,6 +160,7 @@ def measure_iv_curves_on_multiple_slots(bureaucrat:RunBureaucrat, voltages:dict,
 				n_measurements_per_voltage = n_measurements_per_voltage,
 				current_compliance = current_compliances[slot_number],
 				silent = silent,
+				reporter = reporter,
 			)
 			threads.append(thread)
 	
@@ -178,7 +192,7 @@ if __name__=='__main__':
 	from utils import create_a_timestamp
 	
 	SLOTS = [1,2,3,4,5,6,7,8]
-	VOLTAGE_VALUES = list(numpy.linspace(0,777,333))
+	VOLTAGE_VALUES = list(numpy.linspace(0,777,99))
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = pandas.read_csv('configuration_files/standby_configuration.csv').set_index('slot_number')['Current compliance (A)'].to_dict()
@@ -194,3 +208,5 @@ if __name__=='__main__':
 			n_measurements_per_voltage = 2,
 			silent = False,
 		)
+		print(f'Doing plots...')
+		plot_IV_curves_all_together(Mariano)
