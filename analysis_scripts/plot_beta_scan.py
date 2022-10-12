@@ -59,7 +59,7 @@ def binned_fit_langauss(samples, bins='auto', nan_policy='drop', maxfev=0):
 		lambda x, mpv, xi, sigma: langauss.pdf(x, mpv, xi, sigma),
 		xdata = bin_centers,
 		ydata = hist,
-		p0 = [p*((np.random.rand()-.5)*.2+1) for p in [landau_x_mpv_guess, landau_xi_guess, gauss_sigma_guess]], # I am multiplying by this random number just for those cases in which it cannot converge by default, this introduces some noise that helps making it to converge by just running it another time.
+		p0 = [p*((np.random.rand()-.5)*.1+1) for p in [landau_x_mpv_guess, landau_xi_guess, gauss_sigma_guess]], # I am multiplying by this random number just for those cases in which it cannot converge by default, this introduces some noise that helps making it to converge by just running it another time.
 		absolute_sigma = True,
 		maxfev = maxfev,
 		# ~ bounds = ([0]*3, [float('inf')]*3), # Don't know why setting the limits make this to fail.
@@ -154,7 +154,7 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 			if col in {'signal_name','n_trigger'}:
 				continue
 			if not all_distributions:
-				if col not in {'Amplitude (V)','Collected charge (V s)','SNR','Noise (V)'}:
+				if col not in {'Amplitude (V)','Collected charge (V s)','SNR','Noise (V)','t_50 (s)'}:
 					continue
 			fig = px.histogram(
 				df,
@@ -246,7 +246,7 @@ def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucra
 	with Ernesto.handle_task('plot_everything_from_beta_scan_sweeping_bias_voltage') as Ernestos_employee:
 		plot_everything_from_beta_scans_recursively(Ernesto, measured_stuff_vs_when=measured_stuff_vs_when, all_distributions=all_distributions)
 		path_to_subplots = []
-		for plot_type in {'Amplitude (V) ecdf','scatter matrix plot'}:
+		for plot_type in {'Amplitude (V) ecdf','Collected charge (V s) ecdf','t_50 (s) ecdf','scatter matrix plot'}:
 			for subrun in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 				path_to_subplots.append(
 					{
