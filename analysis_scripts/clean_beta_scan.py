@@ -183,6 +183,21 @@ def clean_beta_scan_plots(bureaucrat:RunBureaucrat, scatter_plot:bool=True, lang
 				str(Johns_eployee.path_to_directory_of_my_task/Path('scatter matrix plot.html')),
 				include_plotlyjs = 'cdn',
 			)
+			
+			for variables in {('t_50 (s)','Amplitude (V)')}:
+				fig = px.scatter(
+					data_frame = df,
+					x = variables[0],
+					y = variables[1],
+					title = f'Scatter plot<br><sup>{bureaucrat.run_name}</sup>',
+					symbol = 'signal_name',
+					color = 'is_background',
+					color_discrete_map = COLOR_DISCRETE_MAP,
+				)
+				fig.write_html(
+					str(Johns_eployee.path_to_directory_of_my_task/Path(' '.join(list(variables)).replace(' ','_') + '_scatter_plot.html')),
+					include_plotlyjs = 'cdn',
+				)
 		
 		if langauss_plots:
 			for col in {'Amplitude (V)','Collected charge (V s)'}:
@@ -214,7 +229,8 @@ def plots_of_clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, sca
 		for dummy_bureaucrat in Ernesto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 			clean_beta_scan_plots(dummy_bureaucrat, scatter_plot=scatter_plot, langauss_plots=langauss_plots, distributions=distributions)
 		path_to_subplots = []
-		for plot_type in {'scatter matrix plot','langauss fit to Amplitude (V)','langauss fit to Collected charge (V s)'}:
+		plot_types = [p.stem for p in (Ernesto.list_subruns_of_task('beta_scan_sweeping_bias_voltage')[0].path_to_directory_of_task('clean_beta_scan_plots')).iterdir() if p.suffix == '.html']
+		for plot_type in plot_types:
 			for dummy_bureaucrat in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 				path_to_subplots.append(
 					{
