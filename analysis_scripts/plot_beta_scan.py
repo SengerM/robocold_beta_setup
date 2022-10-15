@@ -160,7 +160,7 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 				df,
 				title = f'{col} histogram<br><sup>Run: {John.run_name}</sup>',
 				x = col,
-				facet_row = 'signal_name',
+				color = 'signal_name',
 			)
 			fig.write_html(
 				str(path_to_save_plots/Path(f'{col} histogram.html')),
@@ -171,7 +171,7 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 				df,
 				title = f'{col} ECDF<br><sup>Run: {John.run_name}</sup>',
 				x = col,
-				facet_row = 'signal_name',
+				color = 'signal_name',
 			)
 			fig.write_html(
 				str(path_to_save_plots/Path(f'{col} ecdf.html')),
