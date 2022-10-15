@@ -12,6 +12,7 @@ import shutil
 from clean_beta_scan import tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan
 import multiprocessing
 from summarize_parameters import read_summarized_data
+import dominate # https://github.com/Knio/dominate
 
 N_BOOTSTRAP = 99
 STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION = 'sigma_from_gaussian_fit' # For the time resolution I will use the `sigma_from_gaussian_fit` because in practice ends up being the most robust and reliable of all.
@@ -466,6 +467,34 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 			str(Norbertos_employee.path_to_directory_of_my_task/'jitter_vs_bias_voltage.html'),
 			include_plotlyjs = 'cdn',
 		)
+		
+		# Collect all plots in documents so it is easy to view them all together.
+		path_to_subplots = []
+		plot_types = [p.stem for p in (Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage')[0].path_to_directory_of_task('jitter_calculation_beta_scan')).iterdir() if p.suffix == '.html']
+		for plot_type in plot_types:
+			for subrun in Norbertos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+				path_to_the_plot = Path('../..')/(subrun.path_to_directory_of_task('jitter_calculation_beta_scan')/f'{plot_type}.html').relative_to(Norberto.path_to_run_directory)
+				print(path_to_the_plot)
+				path_to_subplots.append(
+					{
+						'plot_type': plot_type,
+						'path_to_plot': path_to_the_plot,
+						'run_name': subrun.run_name,
+					}
+				)
+		path_to_subplots_df = pandas.DataFrame(path_to_subplots).set_index('plot_type')
+		for plot_type in set(path_to_subplots_df.index.get_level_values('plot_type')):
+			document_title = f'{plot_type} plots from beta_scan_sweeping_bias_voltage {Norberto.run_name}'
+			html_doc = dominate.document(title=document_title)
+			with html_doc:
+				dominate.tags.h1(document_title)
+				with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
+					for idx,row in path_to_subplots_df.loc[plot_type].sort_values('run_name').iterrows():
+						dominate.tags.iframe(src=str(row['path_to_plot']), style=f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;')
+			path_for_saving_plots_all_together = Norbertos_employee.path_to_directory_of_my_task/f'plots_of_subruns'
+			path_for_saving_plots_all_together.mkdir(exist_ok=True)
+			with open(path_for_saving_plots_all_together/f'{plot_type} together.html', 'w') as ofile:
+				print(html_doc, file=ofile)
 
 def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
 	Nestor = bureaucrat
