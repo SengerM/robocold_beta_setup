@@ -5,6 +5,8 @@ from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/Senger
 from pathlib import Path
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 import pandas
+from summarize_parameters import read_summarized_data
+import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
 
 def plot_iv_curve(bureaucrat:RunBureaucrat):
 	raise NotImplementedError()
@@ -99,8 +101,35 @@ def plot_IV_curves_all_together(bureaucrat:RunBureaucrat):
 			include_plotlyjs = 'cdn',
 		)
 
+def IV_curve_from_beta_scan_data(bureaucrat:RunBureaucrat):
+	with bureaucrat.handle_task('IV_curve_from_beta_scan_data') as employee:
+		bureaucrat.check_these_tasks_were_run_successfully(['beta_scan_sweeping_bias_voltage'])
+		summary = read_summarized_data(bureaucrat)
+		summary = summary[['Bias voltage (V)','Bias current (A)','Temperature (°C)','Humidity (%RH)']]
+		summary.columns = [f'{col[0]} {col[1]}' for col in summary.columns]
+		summary.to_pickle(employee.path_to_directory_of_my_task/'iv_data.pickle')
+		
+		fig = px.line(
+			data_frame = summary.reset_index(drop=False).sort_values(['device_name','Bias voltage (V) mean']),
+			x = 'Bias voltage (V) mean',
+			y = 'Bias current (A) mean',
+			error_x = 'Bias voltage (V) std',
+			error_y = 'Bias current (A) std',
+			color = 'device_name',
+			title = f'IV curve from beta scan data<br><sup>{bureaucrat.run_name}</sup>',
+			markers = True,
+			hover_data = ['Temperature (°C) mean','Humidity (%RH) mean'],
+		)
+		fig.update_layout(xaxis = dict(autorange = "reversed"))
+		fig.write_html(
+			str(employee.path_to_directory_of_my_task/'iv_curve.html'),
+			include_plotlyjs = 'cdn',
+		)
+
 if __name__ == '__main__':
 	import argparse
+	
+	grafica.plotly_utils.utils.set_my_template_as_default()
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--dir',
@@ -112,4 +141,4 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	plot_IV_curves_all_together(RunBureaucrat(Path(args.directory)))
+	IV_curve_from_beta_scan_data(RunBureaucrat(Path(args.directory)))
