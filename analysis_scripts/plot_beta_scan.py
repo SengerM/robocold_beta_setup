@@ -262,7 +262,8 @@ def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucra
 	with Ernesto.handle_task('plot_everything_from_beta_scan_sweeping_bias_voltage') as Ernestos_employee:
 		plot_everything_from_beta_scans_recursively(Ernesto, measured_stuff_vs_when=measured_stuff_vs_when, all_distributions=all_distributions)
 		path_to_subplots = []
-		for plot_type in {'Amplitude (V) ecdf','Collected charge (V s) ecdf','t_50 (s) ecdf','scatter matrix plot','t_50_(s)_Amplitude_(V)_scatter_plot'}:
+		plot_types = [p.stem for p in (Ernesto.list_subruns_of_task('beta_scan_sweeping_bias_voltage')[0].path_to_directory_of_task('plot_everything_from_beta_scan')/f'parsed_from_waveforms').iterdir()]
+		for plot_type in plot_types:
 			for subrun in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 				path_to_subplots.append(
 					{
