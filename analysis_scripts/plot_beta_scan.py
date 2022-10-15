@@ -139,7 +139,7 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 					title = f'{col} vs time<br><sup>Run: {John.run_name}</sup>',
 					x = 'When',
 					y = col,
-					color = 'device_name',
+					color = 'signal_name',
 					markers = True,
 				)
 				fig.write_html(
@@ -178,31 +178,31 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 				include_plotlyjs = 'cdn',
 			)
 			
-			columns_for_scatter_matrix_plot = set(df.columns) 
-			columns_for_scatter_matrix_plot -= {'n_trigger','signal_name'} 
-			columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
-			columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
-			fig = px.scatter_matrix(
-				df,
-				dimensions = sorted(columns_for_scatter_matrix_plot),
-				title = f'Scatter matrix plot<br><sup>Run: {John.run_name}</sup>',
-				color = 'signal_name',
-				hover_data = ['n_trigger'],
+		columns_for_scatter_matrix_plot = set(df.columns) 
+		columns_for_scatter_matrix_plot -= {'n_trigger','signal_name'} 
+		columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
+		columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
+		fig = px.scatter_matrix(
+			df,
+			dimensions = sorted(columns_for_scatter_matrix_plot),
+			title = f'Scatter matrix plot<br><sup>Run: {John.run_name}</sup>',
+			color = 'signal_name',
+			hover_data = ['n_trigger'],
+		)
+		fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
+		for k in range(len(fig.data)):
+			fig.data[k].update(
+				selected = dict(
+					marker = dict(
+						opacity = 1,
+						color = 'black',
+					)
+				),
 			)
-			fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
-			for k in range(len(fig.data)):
-				fig.data[k].update(
-					selected = dict(
-						marker = dict(
-							opacity = 1,
-							color = 'black',
-						)
-					),
-				)
-			fig.write_html(
-				str(path_to_save_plots/Path('scatter matrix plot.html')),
-				include_plotlyjs = 'cdn',
-			)
+		fig.write_html(
+			str(path_to_save_plots/Path('scatter matrix plot.html')),
+			include_plotlyjs = 'cdn',
+		)
 		
 		path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms')
 		path_to_save_plots.mkdir(exist_ok=True)
@@ -226,6 +226,19 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 				str(path_to_save_plots/Path(f'{col} langauss fit.html')),
 				include_plotlyjs = 'cdn',
 			)
+		
+		for variables in {('t_50 (s)','Amplitude (V)')}:
+			fig = px.scatter(
+				data_frame = parsed_from_waveforms_df.reset_index().sort_values('signal_name'),
+				x = variables[0],
+				y = variables[1],
+				title = f'Scatter plot<br><sup>{bureaucrat.run_name}</sup>',
+				color = 'signal_name'
+			)
+			fig.write_html(
+				str(path_to_save_plots/Path(' '.join(list(variables)).replace(' ','_') + '_scatter_plot.html')),
+				include_plotlyjs = 'cdn',
+			)
 
 def plot_everything_from_beta_scans_recursively(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False):
 	Melvin = bureaucrat
@@ -241,12 +254,15 @@ def plot_everything_from_beta_scans_recursively(bureaucrat:RunBureaucrat, measur
 
 def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False):
 	Ernesto = bureaucrat
-	Ernesto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	
+	TASKS = {'beta_scan_sweeping_bias_voltage','kill_device_por_Narnia'}
+	if not any([Ernesto.was_task_run_successfully(task) for task in TASKS]):
+		raise RuntimeError(f'None of the tasks {TASKS} was completed for run {repr(Ernesto.run_name)} located in {repr(str(Ernesto.path_to_run_directory))}.')
 	
 	with Ernesto.handle_task('plot_everything_from_beta_scan_sweeping_bias_voltage') as Ernestos_employee:
 		plot_everything_from_beta_scans_recursively(Ernesto, measured_stuff_vs_when=measured_stuff_vs_when, all_distributions=all_distributions)
 		path_to_subplots = []
-		for plot_type in {'Amplitude (V) ecdf','Collected charge (V s) ecdf','t_50 (s) ecdf','scatter matrix plot'}:
+		for plot_type in {'Amplitude (V) ecdf','Collected charge (V s) ecdf','t_50 (s) ecdf','scatter matrix plot','t_50_(s)_Amplitude_(V)_scatter_plot'}:
 			for subrun in Ernestos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 				path_to_subplots.append(
 					{
@@ -276,7 +292,7 @@ def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucra
 def script_core(bureaucrat:RunBureaucrat):
 	if bureaucrat.was_task_run_successfully('beta_scan'):
 		plot_everything_from_beta_scan(bureaucrat = bureaucrat)
-	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+	elif any([bureaucrat.was_task_run_successfully(task) for task in {'beta_scan_sweeping_bias_voltage','kill_device_por_Narnia'}]):
 		plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat = bureaucrat)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(bureaucrat.run_name)} located in {bureaucrat.path_to_run_directory}.')
