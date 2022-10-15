@@ -5,6 +5,7 @@ from collected_charge import script_core as collected_charge
 from jitter_calculation import script_core as jitter_calculation
 from time_resolution import script_core as time_resolution
 from summarize_parameters import summarize_beta_scan_measured_stuff_recursively as summarize_parameters
+from plot_iv_curves import IV_curve_from_beta_scan_data
 
 if __name__ == '__main__':
 	import argparse
@@ -21,8 +22,9 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	bureaucrat = RunBureaucrat(Path(args.directory))
 	
-	summarize_parameters(bureaucrat, force=True)
 	clean_beta_scan(bureaucrat)
+	summarize_parameters(bureaucrat, force=True)
+	IV_curve_from_beta_scan_data(bureaucrat)
 	collected_charge(bureaucrat, force=True)
 	jitter_calculation(
 		bureaucrat,
