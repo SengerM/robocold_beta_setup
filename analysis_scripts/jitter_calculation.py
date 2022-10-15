@@ -431,10 +431,10 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 		for Raúl in Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 			Raúl.check_these_tasks_were_run_successfully(['jitter_calculation_beta_scan','summarize_beta_scan_measured_stuff'])
 			_ = pandas.read_pickle(Raúl.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.pickle')
-			_['measurement_name'] = Raúl.run_name
+			_['run_name'] = Raúl.run_name
 			jitter.append(_)
 		jitter = pandas.DataFrame.from_records(jitter)
-		jitter.set_index('measurement_name',drop=True,inplace=True)
+		jitter.set_index('run_name',drop=True,inplace=True)
 		
 		signals_names = set(jitter['signals_names'])
 		if len(signals_names) != 1 or len(list(signals_names)[0]) != 2:
@@ -467,6 +467,26 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 		fig.update_layout(xaxis = dict(autorange = "reversed"))
 		fig.write_html(
 			str(Norbertos_employee.path_to_directory_of_my_task/'jitter_vs_bias_voltage.html'),
+			include_plotlyjs = 'cdn',
+		)
+		
+		k_CFD = jitter[[col for col in jitter.columns if col[:2]=='k_' and col[-4:]==' (%)']]
+		k_CFD = k_CFD.stack()
+		k_CFD.rename('k_CFD (%)',inplace=True)
+		k_CFD = k_CFD.to_frame()
+		k_CFD.index.set_names(k_CFD.index.names[:-1] + ['CFD'], inplace=True)
+		
+		fig = px.line(
+			title = f'Jitter vs bias voltage<br><sup>Run: {Norberto.run_name}</sup>',
+			data_frame = k_CFD.reset_index(drop=False).sort_values('run_name'),
+			x = 'run_name',
+			y = 'k_CFD (%)',
+			color = 'CFD',
+			markers = True,
+		)
+		fig.update_yaxes(range=[0,100])
+		fig.write_html(
+			str(Norbertos_employee.path_to_directory_of_my_task/'CFD_vs_bias_voltage.html'),
 			include_plotlyjs = 'cdn',
 		)
 		
