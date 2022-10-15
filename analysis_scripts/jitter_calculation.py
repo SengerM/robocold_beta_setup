@@ -377,6 +377,8 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 				'Jitter (s)': jitter_results.loc['real data','Jitter (s)'],
 				'Jitter (s) error': jitter_results['Jitter (s)'].std(),
 				'signals_names': tuple(sorted(set_of_measured_signals)),
+				jitter_df.index.names[0]: constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0],
+				jitter_df.index.names[1]: constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1],
 			}
 		)
 		jitter.to_pickle(Norbertos_employee.path_to_directory_of_my_task/'jitter.pickle')
@@ -474,7 +476,6 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 		for plot_type in plot_types:
 			for subrun in Norbertos_employee.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 				path_to_the_plot = Path('../..')/(subrun.path_to_directory_of_task('jitter_calculation_beta_scan')/f'{plot_type}.html').relative_to(Norberto.path_to_run_directory)
-				print(path_to_the_plot)
 				path_to_subplots.append(
 					{
 						'plot_type': plot_type,
@@ -509,7 +510,7 @@ def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
 		jitter_calculation_beta_scan(
 			bureaucrat = Nestor,
 			CFD_thresholds = CFD_thresholds,
-			force = force,
+			force = True,
 		)
 	elif Nestor.was_task_run_successfully('automatic_beta_scans'):
 		for b in Nestor.list_subruns_of_task('automatic_beta_scans'):
