@@ -118,7 +118,7 @@ def IV_curve_from_beta_scan_data(bureaucrat:RunBureaucrat):
 			color = 'device_name',
 			title = f'IV curve from beta scan data<br><sup>{bureaucrat.run_name}</sup>',
 			markers = True,
-			hover_data = ['Temperature (°C) mean','Humidity (%RH) mean'],
+			hover_data = ['Temperature (°C) mean','Humidity (%RH) mean','run_name'],
 		)
 		fig.update_layout(xaxis = dict(autorange = "reversed"))
 		fig.write_html(
