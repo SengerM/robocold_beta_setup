@@ -7,6 +7,18 @@ from time_resolution import script_core as time_resolution
 from summarize_parameters import summarize_beta_scan_measured_stuff_recursively as summarize_parameters
 from plot_iv_curves import IV_curve_from_beta_scan_data
 
+def do_all(bureaucrat:RunBureaucrat, force:bool=False):
+	clean_beta_scan(bureaucrat)
+	summarize_parameters(bureaucrat, force=True)
+	IV_curve_from_beta_scan_data(bureaucrat)
+	collected_charge(bureaucrat, force=force)
+	jitter_calculation(
+		bureaucrat,
+		CFD_thresholds = 'best',
+		force = force,
+	)
+	time_resolution(bureaucrat)
+
 if __name__ == '__main__':
 	import argparse
 
@@ -18,17 +30,18 @@ if __name__ == '__main__':
 		dest = 'directory',
 		type = str,
 	)
+	parser.add_argument(
+		'--force',
+		help = 'If this flag is passed, it will force the calculation even if it was already done beforehand. Old data will be deleted.',
+		required = False,
+		dest = 'force',
+		action = 'store_true'
+	)
 
 	args = parser.parse_args()
 	bureaucrat = RunBureaucrat(Path(args.directory))
 	
-	clean_beta_scan(bureaucrat)
-	summarize_parameters(bureaucrat, force=True)
-	IV_curve_from_beta_scan_data(bureaucrat)
-	collected_charge(bureaucrat, force=True)
-	jitter_calculation(
+	do_all(
 		bureaucrat,
-		CFD_thresholds = 'best',
-		force = True,
+		force = args.force,
 	)
-	time_resolution(bureaucrat)
