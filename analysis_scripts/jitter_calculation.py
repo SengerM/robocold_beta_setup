@@ -477,7 +477,7 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 		k_CFD.index.set_names(k_CFD.index.names[:-1] + ['CFD'], inplace=True)
 		
 		fig = px.line(
-			title = f'Jitter vs bias voltage<br><sup>Run: {Norberto.run_name}</sup>',
+			title = f'CFD vs bias voltage<br><sup>Run: {Norberto.run_name}</sup>',
 			data_frame = k_CFD.reset_index(drop=False).sort_values('run_name'),
 			x = 'run_name',
 			y = 'k_CFD (%)',
@@ -516,6 +516,24 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 			path_for_saving_plots_all_together.mkdir(exist_ok=True)
 			with open(path_for_saving_plots_all_together/f'{plot_type} together.html', 'w') as ofile:
 				print(html_doc, file=ofile)
+
+def read_jitter_data(bureaucrat:RunBureaucrat):
+	if bureaucrat.was_task_run_successfully('beta_scan'):
+		bureaucrat.check_these_tasks_were_run_successfully('jitter_calculation_beta_scan')
+		_ = pandas.read_pickle(bureaucrat.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.pickle')
+		_ = _.to_frame().transpose()
+		return _
+	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+		jitter = []
+		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			_ = read_jitter_data(subrun)
+			_['run_name'] = subrun.run_name
+			_.set_index('run_name',inplace=True)
+			jitter.append(_)
+		jitter = pandas.concat(jitter)
+		return jitter
+	else:
+		raise RuntimeError(f'Dont know how to read the jitter in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}')
 
 def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
 	Nestor = bureaucrat
