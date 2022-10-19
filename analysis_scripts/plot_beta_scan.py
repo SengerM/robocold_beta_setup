@@ -54,16 +54,18 @@ def binned_fit_langauss(samples, bins='auto', nan_policy='drop', maxfev=0):
 	bin_centers = np.append(bin_centers, bin_centers[-1]+np.diff(bin_edges)[0])
 	landau_x_mpv_guess = bin_centers[np.argmax(hist)]
 	landau_xi_guess = median_abs_deviation(samples)/5
-	gauss_sigma_guess = landau_xi_guess/2 
-	popt, pcov = curve_fit(
-		lambda x, mpv, xi, sigma: langauss.pdf(x, mpv, xi, sigma),
-		xdata = bin_centers,
-		ydata = hist,
-		p0 = [p*((np.random.rand()-.5)*.1+1) for p in [landau_x_mpv_guess, landau_xi_guess, gauss_sigma_guess]], # I am multiplying by this random number just for those cases in which it cannot converge by default, this introduces some noise that helps making it to converge by just running it another time.
-		absolute_sigma = True,
-		maxfev = maxfev,
-		# ~ bounds = ([0]*3, [float('inf')]*3), # Don't know why setting the limits make this to fail.
-	)
+	gauss_sigma_guess = landau_xi_guess/2
+	with warnings.catch_warnings():
+		warnings.filterwarnings("ignore", message="Covariance of the parameters could not be estimated")
+		popt, pcov = curve_fit(
+			lambda x, mpv, xi, sigma: langauss.pdf(x, mpv, xi, sigma),
+			xdata = bin_centers,
+			ydata = hist,
+			p0 = [p*((np.random.rand()-.5)*.1+1) for p in [landau_x_mpv_guess, landau_xi_guess, gauss_sigma_guess]], # I am multiplying by this random number just for those cases in which it cannot converge by default, this introduces some noise that helps making it to converge by just running it another time.
+			absolute_sigma = True,
+			maxfev = maxfev,
+			# ~ bounds = ([0]*3, [float('inf')]*3), # Don't know why setting the limits make this to fail.
+		)
 	return popt, pcov, hist, bin_centers
 
 def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, column_name, line_color, maxfev=0):
