@@ -79,27 +79,29 @@ def plot_IV_curves_all_together(bureaucrat:RunBureaucrat):
 		for col in {'Bias voltage (V)','Bias current (A)'}:
 			averaged_data_df[f'{col} error'] = standard_deviation_data_df[col]
 		averaged_data_df.reset_index(inplace=True)
-		fig = px.line(
-			averaged_data_df.sort_values(['device_name','n_voltage']).reset_index(),
-			x = 'Bias voltage (V)',
-			y = 'Bias current (A)',
-			error_y = 'Bias current (A) error',
-			error_x = 'Bias voltage (V) error',
-			color = 'device_name',
-			markers = True,
-			title = f'IV curves<br><sup>Measurement: {Richard.run_name}</sup>',
-			hover_data = ['n_voltage'],
-		)
-		fig.update_traces(
-			error_y = dict(
-				width = 1,
-				thickness = .8,
+		for log_y in {True,False}:
+			fig = px.line(
+				averaged_data_df.sort_values(['device_name','n_voltage']).reset_index(),
+				x = 'Bias voltage (V)',
+				y = 'Bias current (A)',
+				error_y = 'Bias current (A) error',
+				error_x = 'Bias voltage (V) error',
+				color = 'device_name',
+				markers = True,
+				title = f'IV curves<br><sup>{Richard.run_name}</sup>',
+				hover_data = ['n_voltage'],
+				log_y = log_y,
 			)
-		)
-		fig.write_html(
-			str(plot_IV_curves_all_together_task_handler.path_to_directory_of_my_task/Path('iv_curves.html')),
-			include_plotlyjs = 'cdn',
-		)
+			fig.update_traces(
+				error_y = dict(
+					width = 1,
+					thickness = .8,
+				)
+			)
+			fig.write_html(
+				str(plot_IV_curves_all_together_task_handler.path_to_directory_of_my_task/Path(f'iv_curves_{"lin" if log_y==False else "log"}.html')),
+				include_plotlyjs = 'cdn',
+			)
 
 def IV_curve_from_beta_scan_data(bureaucrat:RunBureaucrat):
 	with bureaucrat.handle_task('IV_curve_from_beta_scan_data') as employee:
@@ -141,4 +143,4 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	IV_curve_from_beta_scan_data(RunBureaucrat(Path(args.directory)))
+	plot_IV_curves_all_together(RunBureaucrat(Path(args.directory)))
