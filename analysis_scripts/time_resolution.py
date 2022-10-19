@@ -29,7 +29,11 @@ def time_resolution_DUT_and_reference(bureaucrat:RunBureaucrat, reference_signal
 		jitter = ufloat(jitter['Jitter (s)'], jitter['Jitter (s) error'])
 		reference_contribution = ufloat(reference_signal_time_resolution,reference_signal_time_resolution_error)
 		
-		DUT_time_resolution = (jitter**2-reference_contribution**2)**.5
+		try:
+			DUT_time_resolution = (jitter**2-reference_contribution**2)**.5
+		except ValueError as e:
+			if 'The uncertainties module does not handle complex results' in str(e):
+				DUT_time_resolution = ufloat(float('NaN'), float('NaN'))
 		
 		DUT_time_resolution = pandas.Series(
 			{
