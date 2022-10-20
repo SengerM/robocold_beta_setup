@@ -18,15 +18,19 @@ def time_resolution_DUT_and_reference(bureaucrat:RunBureaucrat, reference_signal
 	with bureaucrat.handle_task('time_resolution_DUT_and_reference') as employee:
 		jitter = pandas.read_pickle(bureaucrat.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.pickle')
 		
-		if reference_signal_name not in jitter['signals_names']:
+		signals_names = {col[2:-4] for col in jitter.columns if col[:2]=='k_' and col[-4:]==' (%)'}
+		if len(signals_names) != 2:
+			raise RuntimeError(f'Something is wrong with the data, I was expecting two signals but I am finding {len(signals_names)}...')
+		
+		if reference_signal_name not in signals_names:
 			raise RuntimeError(f'Cannot find reference signal name within the measured signals...')
 		
-		DUT_signal_name = set(jitter['signals_names']) - set([reference_signal_name])
+		DUT_signal_name = signals_names - set([reference_signal_name])
 		if len(DUT_signal_name) != 1:
 			raise RuntimeError(f'Cannot find DUT signal name, check what is going on.')
 		DUT_signal_name = list(DUT_signal_name)[0]
 		
-		jitter = ufloat(jitter['Jitter (s)'], jitter['Jitter (s) error'])
+		jitter = ufloat(jitter.loc[0,'Jitter (s)'], jitter.loc[0,'Jitter (s) error'])
 		reference_contribution = ufloat(reference_signal_time_resolution,reference_signal_time_resolution_error)
 		
 		try:

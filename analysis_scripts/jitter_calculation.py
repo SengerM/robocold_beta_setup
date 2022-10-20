@@ -15,7 +15,6 @@ from summarize_parameters import read_summarized_data
 import dominate # https://github.com/Knio/dominate
 
 N_BOOTSTRAP = 99
-STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION = 'sigma_from_gaussian_fit' # For the time resolution I will use the `sigma_from_gaussian_fit` because in practice ends up being the most robust and reliable of all.
 
 def kMAD(x,nan_policy='omit'):
 	"""Calculates the median absolute deviation multiplied by 1.4826... 
@@ -148,91 +147,86 @@ def sigma_from_gaussian_fit(x, nan_policy='drop')->float:
 	_, sigma, _ = fit_gaussian_to_samples(samples=x, bins='auto', nan_policy=nan_policy)
 	return sigma
 
-def plot_cfd(jitter_df, constant_fraction_discriminator_thresholds_to_use_for_the_jitter):
-	"""Plot the color map of the constant fraction discriminator thresholds
-	and the resulting jitter.
-	
-	Arguments
-	---------
-	jitter_df: pandas.DataFrame
-		A data frame of the form
-		```
-												 Δt (s)                                      
-												   kMAD           std sigma_from_gaussian_fit
-		k_DUT (%) k_reference_trigger (%)                                                    
-		10        10                       4.090410e-11  5.364598e-11            3.973729e-11
-				  20                       4.071987e-11  5.819378e-11            3.919612e-11
-				  30                       4.097219e-11  5.862690e-11            3.929521e-11
-				  40                       4.152937e-11  5.897231e-11            3.960742e-11
-				  50                       4.160544e-11  5.931032e-11            3.989404e-11
-		...                                         ...           ...                     ...
-		90        50                       4.064725e-11  6.696063e-11            3.901498e-11
-				  60                       4.137183e-11  6.756106e-11            3.955964e-11
-				  70                       4.178150e-11  6.808789e-11            4.025378e-11
-				  80                       4.266790e-11  6.865003e-11            4.105474e-11
-				  90                       4.437570e-11  6.945268e-11            4.225482e-11
-		```
-		The number of "sub columns" of the column "Δt (s)" is arbitrary,
-		for each subcolumn a color map plot will be produced. The names
+def plot_cfd(jitter_vs_kCFDs:pandas.Series, jitter_statistics:pandas.DataFrame):
+	"""
+	Examples
+	--------
+	jitter_vs_kCFDs:
+	```
+	k_DUT (%)  k_MCP-PMT (%)
+	10         10               7.407159e-11
+			   20               7.263635e-11
+			   30               7.597977e-11
+			   40               7.408579e-11
+			   50               7.473322e-11
+									...     
+	90         50               7.422313e-11
+			   60               7.438871e-11
+			   70               7.542179e-11
+			   80               7.550948e-11
+			   90               7.615081e-11
+	Name: (Jitter (s), mean), Length: 81, dtype: float64
+	```
+	jitter_statistics:
+	```
+	   k_DUT (%)  k_DUT (%) error  k_MCP-PMT (%)  k_MCP-PMT (%) error    Jitter (s)  Jitter (s) error
+	0       54.0         5.163978           26.0            10.749677  5.203279e-11      2.563595e-12
+	```
 	"""
 	
-	jitter_column_name = jitter_df.columns[0][0]
-	df = jitter_df.copy()
-	df.columns = df.columns.droplevel()
-	
-	figs = {}
-	for col in df.columns:
-		pivot_table_df = pandas.pivot_table(
-			df,
-			values = col,
-			index = jitter_df.index.names[0],
-			columns = jitter_df.index.names[1],
-			aggfunc = np.mean,
-		)
-		fig = go.Figure(
-			data = go.Contour(
-				z = pivot_table_df.to_numpy(),
-				x = pivot_table_df.index,
-				y = pivot_table_df.columns,
-				contours = dict(
-					coloring ='heatmap',
-					showlabels = True, # show labels on contours
-				),
-				colorbar = dict(
-					title = f'{jitter_column_name} {col}',
-					titleside = 'right',
-				),
-				hovertemplate = f'{pivot_table_df.index.name}: %{{x:.0f}} %<br>{pivot_table_df.columns.name}: %{{y:.0f}} %<br>{jitter_column_name} {col}: %{{z:.2e}}',
-				name = '',
+	pivot_table = jitter_vs_kCFDs.unstack()
+	fig = go.Figure(
+		data = go.Contour(
+			z = pivot_table.to_numpy(),
+			x = pivot_table.index,
+			y = pivot_table.columns,
+			contours = dict(
+				coloring ='heatmap',
+				showlabels = True, # show labels on contours
 			),
+			colorbar = dict(
+				title = f'{jitter_vs_kCFDs.name}',
+				titleside = 'right',
+			),
+			hovertemplate = f'{pivot_table.columns.name}: %{{x:.0f}} %<br>{pivot_table.index.name}: %{{y:.0f}} %<br>{jitter_vs_kCFDs.name}: %{{z:.2e}}',
+			name = '',
+		),
+	)
+	fig.add_trace(
+		go.Scatter(
+			x = [jitter_statistics.loc[0,pivot_table.columns.name]],
+			y = [jitter_statistics.loc[0,pivot_table.index.name]],
+			error_x = dict(
+				type = 'data',
+				array = [jitter_statistics.loc[0,f'{pivot_table.columns.name} error']],
+				visible = True,
+			),
+			error_y = dict(
+				type = 'data',
+				array = [jitter_statistics.loc[0,f'{pivot_table.index.name} error']],
+				visible = True,
+			),
+			mode = 'markers',
+			hovertext = [f"<b>Jitter</b><br>{pivot_table.index.name}: {jitter_statistics.loc[0,pivot_table.index.name]:.0f} %<br>{pivot_table.columns.name}: {jitter_statistics.loc[0,pivot_table.columns.name]:.0f} %<br>{jitter_vs_kCFDs.name}: {jitter_statistics.loc[0,'Jitter (s)']*1e12:.2f}±{jitter_statistics.loc[0,'Jitter (s) error']*1e12:.2f} p"],
+			hoverinfo = 'text',
+			marker = dict(
+				color = '#70ff96',
+				line_width = 2,
+				line_color = '#000000',
+				size = 11,
+			),
+			name = '',
 		)
-		fig.add_trace(
-			go.Scatter(
-				x = [constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]],
-				y = [constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]],
-				mode = 'markers',
-				hovertext = [f'<b>Minimum</b><br>{pivot_table_df.index.name}: {constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]:.0f} %<br>{pivot_table_df.columns.name}: {constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]:.0f} %<br>{jitter_column_name} {col}: {df.loc[constant_fraction_discriminator_thresholds_to_use_for_the_jitter,col]*1e12:.2f} ps'],
-				hoverinfo = 'text',
-				marker = dict(
-					color = '#70ff96',
-					line_width = 2,
-					line_color = '#000000',
-					symbol = 'x',
-					size = 22,
-				),
-				name = '',
-			)
-		)
-		fig.update_yaxes(
-			scaleanchor = "x",
-			scaleratio = 1,
-		)
-		fig.update_layout(
-			xaxis_title = pivot_table_df.columns.name,
-			yaxis_title = pivot_table_df.index.name,
-		)
-		figs[col] = fig
-	return figs
+	)
+	fig.update_yaxes(
+		scaleanchor = "x",
+		scaleratio = 1,
+	)
+	fig.update_layout(
+		xaxis_title = pivot_table.columns.name,
+		yaxis_title = pivot_table.index.name,
+	)
+	return fig
 
 def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best', force:bool=False):
 	"""Calculates the jitter from a beta scan between two devices.
@@ -284,7 +278,7 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 			raise RuntimeError(f'A time resolution calculation requires two signals (DUT and reference, or two DUTs), but this beta scan has the following signal names `{set_of_measured_signals}`. Dont know how to handle this, sorry dude...')
 		
 		jitter_results = []
-		bootstrapped_replicas_data = []
+		jitter_vs_kCFDs = []
 		for k_bootstrap in range(N_BOOTSTRAP+1):
 			bootstrapped_iteration = False
 			if k_bootstrap > 0:
@@ -297,120 +291,89 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 
 			Δt_df = calculate_Δt(df)
 			Δt_df.index = Δt_df.index.droplevel('n_trigger')
-			jitter_df = Δt_df.groupby(level=Δt_df.index.names).agg(func=(kMAD, np.std, sigma_from_gaussian_fit))
+			jitter_vs_kCFD = Δt_df.groupby(level=Δt_df.index.names).agg(func=sigma_from_gaussian_fit)
+			jitter_vs_kCFD.rename(columns={'Δt (s)': 'Jitter (s)'}, inplace=True)
+			
+			jitter_vs_kCFD['k_bootstrap'] = k_bootstrap
+			jitter_vs_kCFD.set_index('k_bootstrap', append=True, inplace=True)
+			
+			jitter_vs_kCFDs.append(jitter_vs_kCFD)
+		jitter_vs_kCFDs = pandas.concat(jitter_vs_kCFDs)
+		
+		jitters = []
+		for k_bootstrap in sorted(set(jitter_vs_kCFDs.index.get_level_values('k_bootstrap'))):
+			_ = jitter_vs_kCFDs.query(f'k_bootstrap=={k_bootstrap}')
 			
 			if CFD_thresholds == 'best':
-				optimum_constant_fraction_discriminator_thresholds = jitter_df.idxmin()
-				optimum_constant_fraction_discriminator_thresholds = optimum_constant_fraction_discriminator_thresholds[('Δt (s)',STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION)]
-				constant_fraction_discriminator_thresholds_to_use_for_the_jitter = optimum_constant_fraction_discriminator_thresholds
+				index_for_jitter = _.idxmin()
 			else: # It is a dictionary specifying the threshold for each signal.
+				if not isinstance(CFD_thresholds, dict):
+					raise TypeError(f'`CFD_thresholds` must be a dictionary, received object of type {type(CFD_thresholds)}.')
 				set_of_signals_in_this_measurement = set(data_df.index.get_level_values('signal_name'))
 				if set_of_signals_in_this_measurement != set(CFD_thresholds.keys()):
 					raise ValueError(f'`CFD_thresholds` specifies signal names that are not found in the data. According to the data the signal names are {set_of_signals_in_this_measurement} and `CFD_thresholds` specifies signal names {set(CFD_thresholds.keys())}.')
 				if any([not 0 <=CFD_thresholds[s] <= 100 for s in set_of_signals_in_this_measurement]):
 					raise ValueError(f'`CFD_thresholds` contains values outside the range from 0 to 100, which is wrong. Received `CFD_thresholds = {CFD_thresholds}`.')
-				constant_fraction_discriminator_thresholds_to_use_for_the_jitter = tuple([CFD_thresholds[k_name[2:-4]] for k_name in jitter_df.index.names]) # The `k_name` is e.g. "'k_DUT (%)'" and here we want just `"DUT"`.
+				index_for_jitter = pandas.Series({col: tuple([CFD_thresholds[k[2:-4]] for k in _.index.names if k!='k_bootstrap'] + [k_bootstrap]) for col in _.columns})
 			
-			jitter_final_number = jitter_df.loc[constant_fraction_discriminator_thresholds_to_use_for_the_jitter,('Δt (s)',STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION)]
-			
-			jitter_results.append(
-				{
-					'measured_on': 'real data' if bootstrapped_iteration == False else 'resampled data',
-					'Jitter (s)': jitter_final_number,
-					jitter_df.index.names[0]: constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0],
-					jitter_df.index.names[1]: constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1],
-				}
-			)
-			
-			if bootstrapped_iteration == True:
-				continue
-			else: # Do some plots
-				figs = plot_cfd(jitter_df, constant_fraction_discriminator_thresholds_to_use_for_the_jitter)
-				for key,fig in figs.items():
-					fig.update_layout(title=f'Jitter vs k<sub>CFD</sub><br><sup>Run: {Norberto.run_name}</sup>')
-				figs[STATISTIC_TO_USE_FOR_THE_FINAL_JITTER_CALCULATION].write_html(str(Norbertos_employee.path_to_directory_of_my_task/f'CFD jitter using {key}.html'), include_plotlyjs='cdn')
-				
-				fig = go.Figure()
-				fig.update_layout(
-					yaxis_title = 'count',
-					xaxis_title = 'Δt (s)',
-					title = f'Δt for {Δt_df.index.names[0]}={constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]} and {Δt_df.index.names[1]}={constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]}<br><sup>Run: {Norberto.run_name}</sup>'
-				)
-				selected_Δt_samples = Δt_df.loc[constant_fraction_discriminator_thresholds_to_use_for_the_jitter]
-				selected_Δt_samples = selected_Δt_samples.to_numpy()
-				selected_Δt_samples = selected_Δt_samples[~np.isnan(selected_Δt_samples)] # Remove NaN values because otherwise the histograms complain...
-				fig.add_trace(
-					scatter_histogram(
-						samples = selected_Δt_samples,
-						name = f'Measured data',
-						error_y = dict(type='auto'),
-					)
-				)
-				fitted_mu, fitted_sigma, fitted_amplitude = fit_gaussian_to_samples(selected_Δt_samples)
-				x_axis_values = sorted(list(np.linspace(min(selected_Δt_samples),max(selected_Δt_samples),99)) + list(np.linspace(fitted_mu-5*fitted_sigma,fitted_mu+5*fitted_sigma,99)))
-				fig.add_trace(
-					go.Scatter(
-						x = x_axis_values,
-						y = gaussian(x_axis_values, fitted_mu, fitted_sigma, fitted_amplitude),
-						name = f'Fitted Gaussian (σ={fitted_sigma*1e12:.2f} ps)',
-					)
-				)
-				fig.add_trace(
-					go.Scatter(
-						x = [fitted_mu, fitted_mu+jitter_final_number],
-						y = 2*[gaussian(x_axis_values, fitted_mu, fitted_sigma, fitted_amplitude).max()*.6],
-						name = f'Jitter ({jitter_final_number*1e12:.2f} ps)',
-						mode = 'lines+markers',
-						hoverinfo = 'none',
-					)
-				)
-				fig.write_html(
-					str(Norbertos_employee.path_to_directory_of_my_task/Path(f'Delta_t distribution and fit where jitter was obtained from.html')),
-					include_plotlyjs = 'cdn',
-				)
-
-		jitter_results = pandas.DataFrame.from_records(jitter_results)
-		jitter_results.set_index('measured_on', inplace=True)
+			jitters.append(_.loc[index_for_jitter])
+		jitters = pandas.concat(jitters)
+		jitters.reset_index(sorted(set(jitters.index.names)-{'k_bootstrap'}), drop=False, inplace=True)
 		
-		jitter = pandas.Series(
-			{
-				'Jitter (s)': jitter_results.loc['real data','Jitter (s)'],
-				'Jitter (s) error': jitter_results['Jitter (s)'].std(),
-				'signals_names': tuple(sorted(set_of_measured_signals)),
-				jitter_df.index.names[0]: constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0],
-				jitter_df.index.names[1]: constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1],
-			}
+		jitter_vs_kCFDs_statistics = jitter_vs_kCFDs.groupby(['k_DUT (%)','k_MCP-PMT (%)']).agg([np.mean,np.std])
+		jitters_statistics = jitters.agg([np.mean,np.std])
+		
+		jitter_vs_kCFDs_statistics.rename(columns={'mean':'', 'std':'error'},inplace=True)
+		jitter_vs_kCFDs_statistics.columns = [' '.join([_ for _ in col if _!='']) for col in jitter_vs_kCFDs_statistics.columns]
+		
+		jitters_statistics.rename(index={'mean':'', 'std':'error'},inplace=True)
+		jitters_statistics = jitters_statistics.unstack().to_frame().transpose()
+		jitters_statistics.columns = [' '.join([_ for _ in col if _!='']) for col in jitters_statistics.columns]
+		
+		jitters_statistics.to_pickle(Norbertos_employee.path_to_directory_of_my_task/'jitter.pickle')
+		jitter_vs_kCFDs_statistics.to_pickle(Norbertos_employee.path_to_directory_of_my_task/'jitter_vs_CFD.pickle')
+		
+		# Do some plots ---
+		
+		fig = plot_cfd(jitter_vs_kCFDs_statistics['Jitter (s)'], jitters_statistics)
+		fig.update_layout(
+			title = f'Jitter vs CFD<br><sup>Run: {bureaucrat.run_name}</sup>',
 		)
-		jitter.to_pickle(Norbertos_employee.path_to_directory_of_my_task/'jitter.pickle')
+		fig.write_html(
+			Norbertos_employee.path_to_directory_of_my_task/'jitter_vs_CFD.html',
+			include_plotlyjs = 'cdn',
+		)
 		
+		_ = jitters.loc[0,jitter_vs_kCFDs_statistics.index.names]
+		constant_fraction_discriminator_thresholds_to_use_for_the_jitter = tuple([int(_[col]) for col in jitter_vs_kCFDs_statistics.index.names])
+		Δt_df = calculate_Δt(data_df).reset_index('n_trigger',drop=True)
 		fig = go.Figure()
 		fig.update_layout(
-			title = f'Statistics for the jitter<br><sup>Run: {Norberto.run_name}</sup>',
-			xaxis_title = 'Jitter (s)',
 			yaxis_title = 'count',
+			xaxis_title = 'Δt (s)',
+			title = f'Δt for {Δt_df.index.names[0]}={constant_fraction_discriminator_thresholds_to_use_for_the_jitter[0]} and {Δt_df.index.names[1]}={constant_fraction_discriminator_thresholds_to_use_for_the_jitter[1]}<br><sup>Run: {Norberto.run_name}</sup>'
 		)
+		selected_Δt_samples = Δt_df.loc[constant_fraction_discriminator_thresholds_to_use_for_the_jitter]
+		selected_Δt_samples = selected_Δt_samples.to_numpy()
+		selected_Δt_samples = selected_Δt_samples[~np.isnan(selected_Δt_samples)] # Remove NaN values because otherwise the histograms complain...
 		fig.add_trace(
 			scatter_histogram(
-				samples = jitter_results.loc['resampled data','Jitter (s)'],
-				name = 'Bootstrapped jitter replicas',
+				samples = selected_Δt_samples,
+				name = f'Measured data',
 				error_y = dict(type='auto'),
 			)
 		)
-		fig.add_vline(
-			x = jitter['Jitter (s)'],
-			annotation_text = f"Jitter = ({jitter['Jitter (s)']*1e12:.2f}±{jitter['Jitter (s) error']*1e12:.2f}) ps", 
-			annotation_position = "bottom left",
-			annotation_textangle = -90,
-		)
-		fig.add_vrect(
-			x0 = jitter['Jitter (s)'] - jitter['Jitter (s) error'],
-			x1 = jitter['Jitter (s)'] + jitter['Jitter (s) error'],
-			opacity = .1,
-			line_width = 0,
-			fillcolor = 'black',
+		fitted_mu, fitted_sigma, fitted_amplitude = fit_gaussian_to_samples(selected_Δt_samples)
+		x_axis_values = sorted(list(np.linspace(min(selected_Δt_samples),max(selected_Δt_samples),99)) + list(np.linspace(fitted_mu-5*fitted_sigma,fitted_mu+5*fitted_sigma,99)))
+		fig.add_trace(
+			go.Scatter(
+				x = x_axis_values,
+				y = gaussian(x_axis_values, fitted_mu, fitted_sigma, fitted_amplitude),
+				name = f'Fitted Gaussian (σ={fitted_sigma*1e12:.2f} ps)',
+			)
 		)
 		fig.write_html(
-			str(Norbertos_employee.path_to_directory_of_my_task/Path(f'histogram bootstrap.html')),
+			str(Norbertos_employee.path_to_directory_of_my_task/Path(f'Delta_t distribution and fit where jitter was obtained from.html')),
 			include_plotlyjs = 'cdn',
 		)
 
@@ -427,21 +390,7 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 				[(bur,thrshld,frc) for bur,thrshld,frc in zip(subruns, [CFD_thresholds]*len(subruns), [force_calculation_on_submeasurements]*len(subruns))]
 			)
 		
-		jitter = []
-		for Raúl in Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
-			Raúl.check_these_tasks_were_run_successfully(['jitter_calculation_beta_scan','summarize_beta_scan_measured_stuff'])
-			_ = pandas.read_pickle(Raúl.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.pickle')
-			_['run_name'] = Raúl.run_name
-			jitter.append(_)
-		jitter = pandas.DataFrame.from_records(jitter)
-		jitter.set_index('run_name',drop=True,inplace=True)
-		
-		signals_names = set(jitter['signals_names'])
-		if len(signals_names) != 1 or len(list(signals_names)[0]) != 2:
-			raise RuntimeError(f'There is a weird error with the signals, check this!')
-		signals_names = list(signals_names)[0]
-		
-		jitter.drop(columns='signals_names',inplace=True)
+		jitter = read_jitter_data(bureaucrat)
 		
 		summary = read_summarized_data(bureaucrat)
 		summary.columns = [f'{col[0]} {col[1]}' for col in summary.columns]
@@ -476,12 +425,26 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 		k_CFD = k_CFD.to_frame()
 		k_CFD.index.set_names(k_CFD.index.names[:-1] + ['CFD'], inplace=True)
 		
+		k_CFD_error = jitter[[col for col in jitter.columns if col[:2]=='k_' and 'error' in col]]
+		k_CFD_error = k_CFD_error.stack()
+		k_CFD_error.rename(index={i: i.replace(' error','') for i in set(k_CFD_error.index.get_level_values(1))}, inplace=True)
+		k_CFD_error.rename('k_CFD (%) error',inplace=True)
+		k_CFD_error = k_CFD_error.to_frame()
+		k_CFD_error.index.set_names(k_CFD_error.index.names[:-1] + ['CFD'], inplace=True)
+		
+		k_CFD = k_CFD.join(k_CFD_error)
+		k_CFD.rename(index={i: i[2:-4] for i in set(k_CFD.index.get_level_values('CFD'))}, inplace=True)
+		k_CFD.index.rename({'CFD':'signal_name'}, inplace=True)
+		
+		k_CFD.to_pickle(Norbertos_employee.path_to_directory_of_my_task/'k_CFD.pickle')
+		
 		fig = px.line(
 			title = f'CFD vs bias voltage<br><sup>Run: {Norberto.run_name}</sup>',
 			data_frame = k_CFD.reset_index(drop=False).sort_values('run_name'),
 			x = 'run_name',
 			y = 'k_CFD (%)',
-			color = 'CFD',
+			error_y = 'k_CFD (%) error',
+			color = 'signal_name',
 			markers = True,
 		)
 		fig.update_yaxes(range=[0,100])
@@ -520,9 +483,7 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 def read_jitter_data(bureaucrat:RunBureaucrat):
 	if bureaucrat.was_task_run_successfully('beta_scan'):
 		bureaucrat.check_these_tasks_were_run_successfully('jitter_calculation_beta_scan')
-		_ = pandas.read_pickle(bureaucrat.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.pickle')
-		_ = _.to_frame().transpose()
-		return _
+		return pandas.read_pickle(bureaucrat.path_to_directory_of_task('jitter_calculation_beta_scan')/'jitter.pickle')
 	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		jitter = []
 		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
@@ -583,6 +544,6 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	script_core(
 		RunBureaucrat(Path(args.directory)),
-		CFD_thresholds = 'best',
+		CFD_thresholds = 'best',#{'DUT': 30, 'MCP-PMT': 20},
 		force = args.force,
 	)
