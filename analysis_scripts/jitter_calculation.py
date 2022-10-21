@@ -14,7 +14,7 @@ import multiprocessing
 from summarize_parameters import read_summarized_data
 import dominate # https://github.com/Knio/dominate
 
-N_BOOTSTRAP = 99
+N_BOOTSTRAP = 33
 
 def kMAD(x,nan_policy='omit'):
 	"""Calculates the median absolute deviation multiplied by 1.4826... 
@@ -252,8 +252,11 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 	
 	Norberto.check_these_tasks_were_run_successfully('beta_scan')
 	
-	if not (CFD_thresholds != 'best' or not isinstance(CFD_thresholds, dict)):
-		raise ValueError('Wrong value for `CFD_thresholds`, please read the documentation of this function.')
+	if not isinstance(CFD_thresholds, dict):
+		raise TypeError(f'`CFD_thresholds` must be a dictionary, received object of type {type(CFD_thresholds)}.')
+	for key,item in CFD_thresholds.items():
+			if item != 'best' and not (isinstance(item, (int,float)) and 0 <= item <= 100):
+				raise ValueError(f'Items in `CFD_thresholds` must be either "best" or a number between 0 and 100, received {CFD_thresholds} where {repr(item)} is invalid.')
 	
 	TASK_NAME = 'jitter_calculation_beta_scan'
 	
@@ -262,6 +265,10 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 	
 	with Norberto.handle_task(TASK_NAME) as Norbertos_employee:
 		data_df = load_whole_dataframe(Norberto.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
+		
+		set_of_signals_in_this_measurement = set(data_df.index.get_level_values('signal_name'))
+		if set(CFD_thresholds.keys()) != set_of_signals_in_this_measurement:
+			raise ValueError(f'`CFD_thresholds` must be a dictionary with the signals names as keys. For run {repr(Norberto.run_name)} located in {repr(str(Norberto.path_to_run_directory))} such signals are {set_of_signals_in_this_measurement} while the keys of `CFD_thresholds` are {set(CFD_thresholds.keys())}.')
 		
 		if Norberto.check_these_tasks_were_run_successfully('clean_beta_scan', raise_error=False): # If there was a cleaning done, let's take it into account...
 			shutil.copyfile( # Put a copy of the cuts in the output directory so there is a record of what was done.
@@ -304,17 +311,24 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 		for k_bootstrap in sorted(set(jitter_vs_kCFDs.index.get_level_values('k_bootstrap'))):
 			_ = jitter_vs_kCFDs.query(f'k_bootstrap=={k_bootstrap}')
 			
-			if CFD_thresholds == 'best':
+			if all([item == 'best' for key,item in CFD_thresholds.items()]):
 				index_for_jitter = _.idxmin()
-			else: # It is a dictionary specifying the threshold for each signal.
-				if not isinstance(CFD_thresholds, dict):
-					raise TypeError(f'`CFD_thresholds` must be a dictionary, received object of type {type(CFD_thresholds)}.')
-				set_of_signals_in_this_measurement = set(data_df.index.get_level_values('signal_name'))
-				if set_of_signals_in_this_measurement != set(CFD_thresholds.keys()):
-					raise ValueError(f'`CFD_thresholds` specifies signal names that are not found in the data. According to the data the signal names are {set_of_signals_in_this_measurement} and `CFD_thresholds` specifies signal names {set(CFD_thresholds.keys())}.')
-				if any([not 0 <=CFD_thresholds[s] <= 100 for s in set_of_signals_in_this_measurement]):
-					raise ValueError(f'`CFD_thresholds` contains values outside the range from 0 to 100, which is wrong. Received `CFD_thresholds = {CFD_thresholds}`.')
+			elif all([isinstance(item, (int,float)) for key,item in CFD_thresholds.items()]):
 				index_for_jitter = pandas.Series({col: tuple([CFD_thresholds[k[2:-4]] for k in _.index.names if k!='k_bootstrap'] + [k_bootstrap]) for col in _.columns})
+			else: # One is "best" and the other is a number...
+				key_with_numeric_value = [key for key,item in CFD_thresholds.items() if isinstance(item, (int,float))][0]
+				key_with_best = [key for key,item in CFD_thresholds.items() if item=='best'][0]
+				position_of_key_with_numeric_value = [i for i in range(len(_.index.names)) if key_with_numeric_value in _.index.names[i]][0]
+				position_of_key_with_best = [i for i in range(len(_.index.names)) if key_with_best in _.index.names[i]][0]
+				if set([position_of_key_with_numeric_value,position_of_key_with_best]) != {0,1}:
+					raise RuntimeError(f'Check this error, this should have never happened.')
+				if position_of_key_with_numeric_value == 0:
+					_ = _.loc[CFD_thresholds[key_with_numeric_value],:,:]
+				elif position_of_key_with_numeric_value == 1:
+					_ = _.loc[:,CFD_thresholds[key_with_numeric_value],:]
+				else:
+					raise RuntimeError(f'Check this error, this should have never happened.')
+				index_for_jitter = _.idxmin()
 			
 			jitters.append(_.loc[index_for_jitter])
 		jitters = pandas.concat(jitters)
@@ -544,6 +558,6 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	script_core(
 		RunBureaucrat(Path(args.directory)),
-		CFD_thresholds = 'best',#{'DUT': 30, 'MCP-PMT': 20},
+		CFD_thresholds = {'DUT': 'best', 'MCP-PMT': 20},
 		force = args.force,
 	)
