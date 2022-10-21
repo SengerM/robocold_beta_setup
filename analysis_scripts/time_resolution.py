@@ -8,10 +8,6 @@ from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github
 from summarize_parameters import read_summarized_data
 from collected_charge import read_collected_charge
 
-REFERENCE_SIGNAL_TIME_RESOLUTION = 17.32e-12 # My best characterization of the Photonis PMT.
-REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR = 2.16e-12 # My best characterization of the Photonis PMT.
-REFERENCE_SIGNAL_NAME = 'MCP-PMT'
-
 def time_resolution_DUT_and_reference(bureaucrat:RunBureaucrat, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
 	bureaucrat.check_these_tasks_were_run_successfully(['beta_scan','jitter_calculation_beta_scan'])
 	
@@ -113,20 +109,20 @@ def time_resolution_DUT_and_reference_vs_bias_voltage(bureaucrat:RunBureaucrat, 
 			include_plotlyjs = 'cdn',
 		)
 
-def script_core(bureaucrat:RunBureaucrat):
+def script_core(bureaucrat:RunBureaucrat, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
 	if bureaucrat.was_task_run_successfully('beta_scan'):
 		time_resolution_DUT_and_reference(
 			bureaucrat = bureaucrat,
-			reference_signal_name = REFERENCE_SIGNAL_NAME,
-			reference_signal_time_resolution = REFERENCE_SIGNAL_TIME_RESOLUTION,
-			reference_signal_time_resolution_error = REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR,
+			reference_signal_name = reference_signal_name,
+			reference_signal_time_resolution = reference_signal_time_resolution,
+			reference_signal_time_resolution_error = reference_signal_time_resolution_error,
 		)
 	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		time_resolution_DUT_and_reference_vs_bias_voltage(
 			bureaucrat = bureaucrat,
-			reference_signal_name = REFERENCE_SIGNAL_NAME,
-			reference_signal_time_resolution = REFERENCE_SIGNAL_TIME_RESOLUTION,
-			reference_signal_time_resolution_error = REFERENCE_SIGNAL_TIME_RESOLUTION_ERROR,
+			reference_signal_name = reference_signal_name,
+			reference_signal_time_resolution = reference_signal_time_resolution,
+			reference_signal_time_resolution_error = reference_signal_time_resolution_error,
 		)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(Manuel.run_name)} located in {Manuel.path_to_run_directory}.')
@@ -147,4 +143,9 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	
-	script_core(bureaucrat = RunBureaucrat(Path(args.directory)))
+	script_core(
+		bureaucrat = RunBureaucrat(Path(args.directory)),
+		reference_signal_name = 'MCP-PMT',
+		reference_signal_time_resolution = 17.32e-12, # My best characterization of the Photonis PMT.
+		reference_signal_time_resolution_error = 2.16e-12, # My best characterization of the Photonis PMT.
+	)

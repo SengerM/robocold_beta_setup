@@ -14,10 +14,15 @@ def do_all(bureaucrat:RunBureaucrat, force:bool=False):
 	collected_charge(bureaucrat, force=force)
 	jitter_calculation(
 		bureaucrat,
-		CFD_thresholds = 'best',
+		CFD_thresholds = {'DUT': 'best', 'MCP-PMT': 20},
 		force = force,
 	)
-	time_resolution(bureaucrat)
+	time_resolution(
+		bureaucrat = RunBureaucrat(Path(args.directory)),
+		reference_signal_name = 'MCP-PMT',
+		reference_signal_time_resolution = 17.32e-12, # My best characterization of the Photonis PMT.
+		reference_signal_time_resolution_error = 2.16e-12, # My best characterization of the Photonis PMT.
+	)
 
 if __name__ == '__main__':
 	import argparse
