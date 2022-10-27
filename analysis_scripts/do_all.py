@@ -57,6 +57,6 @@ if __name__ == '__main__':
 		bureaucrat,
 		skip_charge = False,
 		skip_jitter = False,
-		CFD_thresholds = {'DUT': 20, 'MCP-PMT': 20},
+		CFD_thresholds = {'DUT': 'best', 'MCP-PMT': 20},
 		force = args.force,
 	)
