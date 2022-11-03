@@ -79,7 +79,7 @@ def clean_beta_scan(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None)->Path
 	with John.handle_task('clean_beta_scan') as task:
 		cuts_df = pandas.read_csv(path_to_cuts_file)
 		REQUIRED_COLUMNS = {'signal_name','variable','cut_type','cut_value'}
-		if set(cuts_df.columns) != REQUIRED_COLUMNS:
+		if set.intersection(set(cuts_df.columns),REQUIRED_COLUMNS) != set(REQUIRED_COLUMNS):
 			raise ValueError(f'The file with the cuts {path_to_cuts_file} must have the following columns: {REQUIRED_COLUMNS}, but it has columns {set(cuts_df.columns)}.')
 		data_df = load_whole_dataframe(John.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 		cuts_df.to_csv(task.path_to_directory_of_my_task/Path(f'cuts.backup.csv'), index=False) # Create a backup.
@@ -97,7 +97,7 @@ def clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, path_to_cuts
 		raise FileNotFoundError(f'Cannot find file with the cuts in {path_to_cuts_file}.')
 	cuts_df = pandas.read_csv(path_to_cuts_file)
 	REQUIRED_COLUMNS = {'run_name','signal_name','variable','cut_type','cut_value'}
-	if set(cuts_df.columns) != REQUIRED_COLUMNS:
+	if set.intersection(set(cuts_df.columns),REQUIRED_COLUMNS) != set(REQUIRED_COLUMNS):
 		raise ValueError(f'The file with the cuts {path_to_cuts_file} must have the following columns: {REQUIRED_COLUMNS}, but it has columns {set(cuts_df.columns)}.')
 	cuts_df.set_index('run_name',inplace=True)
 	for Quique in Eriberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
