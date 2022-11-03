@@ -9,6 +9,8 @@ import plotly.graph_objects as go
 from scipy.stats import expon
 from scipy.optimize import curve_fit
 from uncertainties import ufloat
+import multiprocessing
+from summarize_parameters import read_summarized_data
 
 def non_binned_fit(samples:numpy.array, cdf_model, guess:list, nan_policy='drop', maxfev=0):
 	if nan_policy == 'drop':
@@ -115,7 +117,79 @@ def events_rate(bureaucrat:RunBureaucrat, n_bootstraps:int=99):
 			employee.path_to_directory_of_my_task/'events_rates.html',
 			include_plotlyjs = 'cdn',
 		)
+
+def apply_events_rate_recursively(bureaucrat:RunBureaucrat, n_bootstraps:int=99):
+	if bureaucrat.was_task_run_successfully('beta_scan'):
+		events_rate(bureaucrat, n_bootstraps)
+	else:
+		for task in bureaucrat.path_to_run_directory.iterdir():
+			if not task.is_dir():
+				continue
+			for sub_bureaucrat in bureaucrat.list_subruns_of_task(task.parts[-1]):
+				apply_events_rate_recursively(sub_bureaucrat, n_bootstraps)
+
+def read_events_rate(bureaucrat:RunBureaucrat):
+	if bureaucrat.was_task_run_successfully('beta_scan'):
+		bureaucrat.check_these_tasks_were_run_successfully('events_rate')
+		return pandas.read_pickle(bureaucrat.path_to_directory_of_task('events_rate')/'rates.pickle')
+	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+		rates = []
+		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			_ = read_events_rate(subrun)
+			_['run_name'] = subrun.run_name
+			_.set_index('run_name',inplace=True,append=True)
+			rates.append(_)
+		rates = pandas.concat(rates)
+		return rates
+	else:
+		raise RuntimeError(f'Dont know how to read the events rate in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}')
+
+def events_rate_vs_bias_voltage(bureaucrat:RunBureaucrat, n_bootstraps:int=99, number_of_processes:int=1, force:bool=True):
+	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	
+	with bureaucrat.handle_task('events_rate_vs_bias_voltage') as employee:
+		subruns = bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
+		if force == True:
+			with multiprocessing.Pool(number_of_processes) as p:
+				p.starmap(
+					events_rate,
+					[(bur,n_btstrps) for bur,n_btstrps in zip(subruns, [n_bootstraps]*len(subruns))]
+				)
 		
+		rates = read_events_rate(bureaucrat)
+		
+		summary = read_summarized_data(bureaucrat)
+		summary.columns = [' '.join(list(col)) for col in summary.columns]
+		
+		
+		bias_voltage = summary[['Bias voltage (V) mean','Bias voltage (V) std']].reset_index('device_name', drop=True)
+		
+		rates = rates.join(bias_voltage)
+		
+		rates.to_pickle(employee.path_to_directory_of_my_task/'rates_vs_bias_voltage.pickle')
+		rates.to_csv(employee.path_to_directory_of_my_task/'rates_vs_bias_voltage.csv')
+		
+		fig = px.line(
+			title = f'Rate vs bias voltage<br><sup>{bureaucrat.run_name}</sup>',
+			data_frame = rates.reset_index(drop=False).sort_values(['Bias voltage (V) mean','fitting_to']),
+			x = 'Bias voltage (V) mean',
+			error_x = 'Bias voltage (V) std',
+			y = 'Rate (events s^-1)',
+			error_y = 'Rate (events s^-1) error',
+			color = 'fitting_to',
+			markers = True,
+			labels = {
+				'Bias voltage (V) mean': 'Bias voltage (V)',
+				'Rate (events s^-1)': 'Rate (events/s)',
+				'fitting_to': 'Type',
+			}
+		)
+		fig.update_layout(xaxis = dict(autorange = "reversed"))
+		fig.write_html(
+			employee.path_to_directory_of_my_task/'rate_vs_bias_voltage.html',
+			include_plotlyjs = 'cdn',
+		)
+
 if __name__ == '__main__':
 	import argparse
 
@@ -136,4 +210,4 @@ if __name__ == '__main__':
 		action = 'store_true'
 	)
 	args = parser.parse_args()
-	events_rate(RunBureaucrat(Path(args.directory)))
+	events_rate_vs_bias_voltage(RunBureaucrat(Path(args.directory)), number_of_processes=7, force=False)
