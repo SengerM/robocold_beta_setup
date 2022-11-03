@@ -196,11 +196,19 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, transimpedance:pa
 	
 	with Romina.handle_task('collected_charge_vs_bias_voltage') as task_handler:
 		subruns = Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
-		with multiprocessing.Pool(number_of_processes) as p:
-			p.starmap(
-				collected_charge_in_beta_scan,
-				[(bur,trnsmpdnc,frc) for bur,trnsmpdnc,frc in zip(subruns, [transimpedance]*len(subruns), [force_calculation_on_submeasurements]*len(subruns))]
-			)
+		if number_of_processes == 1:
+			for subrun in subruns:
+				collected_charge_in_beta_scan(
+					bureaucrat = subrun,
+					transimpedance = transimpedance,
+					force = force_calculation_on_submeasurements,
+				)
+		else:
+			with multiprocessing.Pool(number_of_processes) as p:
+				p.starmap(
+					collected_charge_in_beta_scan,
+					[(bur,trnsmpdnc,frc) for bur,trnsmpdnc,frc in zip(subruns, [transimpedance]*len(subruns), [force_calculation_on_submeasurements]*len(subruns))]
+				)
 		
 		collected_charge = read_collected_charge(bureaucrat)
 		
@@ -257,13 +265,13 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, transimpedance:pa
 				include_plotlyjs = 'cdn',
 			)
 
-def script_core(bureaucrat:RunBureaucrat, force:bool):
+def script_core(bureaucrat:RunBureaucrat, force:bool, number_of_processes:int=1):
 	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		collected_charge_vs_bias_voltage(
 			bureaucrat = bureaucrat,
 			force_calculation_on_submeasurements = force,
 			transimpedance = TRANSIMPEDANCE,
-			number_of_processes = max(multiprocessing.cpu_count()-1,1)
+			number_of_processes = number_of_processes,
 		)
 	elif bureaucrat.was_task_run_successfully('beta_scan'):
 		collected_charge_in_beta_scan(
@@ -299,4 +307,5 @@ if __name__ == '__main__':
 	script_core(
 		RunBureaucrat(Path(args.directory)),
 		force = args.force,
+		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)

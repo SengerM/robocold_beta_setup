@@ -85,11 +85,15 @@ def noise_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeas
 	Romina.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	with Romina.handle_task('noise_vs_bias_voltage') as task_handler:
 		subruns = Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
-		with multiprocessing.Pool(number_of_processes) as p:
-			p.starmap(
-				noise_in_beta_scan,
-				[(bur,frc) for bur,frc in zip(subruns, [force_calculation_on_submeasurements]*len(subruns))]
-			)
+		if number_of_processes == 1:
+			for subrun in subruns:
+				noise_in_beta_scan(bureaucrat = subrun, force = force_calculation_on_submeasurements)
+		else:
+			with multiprocessing.Pool(number_of_processes) as p:
+				p.starmap(
+					noise_in_beta_scan,
+					[(bur,frc) for bur,frc in zip(subruns, [force_calculation_on_submeasurements]*len(subruns))]
+				)
 		
 		noise = read_noise_in_beta_scan(bureaucrat)
 		
@@ -116,14 +120,14 @@ def noise_vs_bias_voltage(bureaucrat:RunBureaucrat, force_calculation_on_submeas
 			include_plotlyjs = 'cdn',
 		)
 
-def script_core(bureaucrat:RunBureaucrat, force:bool):
+def script_core(bureaucrat:RunBureaucrat, force:bool, number_of_processes:int=1):
 	if bureaucrat.was_task_run_successfully('beta_scan'):
 		noise_in_beta_scan(bureaucrat, force=True)
 	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		noise_vs_bias_voltage(
 			bureaucrat = bureaucrat,
 			force_calculation_on_submeasurements = force,
-			number_of_processes = max(multiprocessing.cpu_count()-1,1),
+			number_of_processes = number_of_processes,
 		)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(bureaucrat.run_name)} located in `{bureaucrat.path_to_run_directory}`...')
@@ -153,4 +157,5 @@ if __name__ == '__main__':
 	script_core(
 		RunBureaucrat(Path(args.directory)),
 		force = args.force,
+		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)

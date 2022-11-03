@@ -398,11 +398,19 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 	
 	with Norberto.handle_task('jitter_calculation_beta_scan_sweeping_voltage') as Norbertos_employee:
 		subruns = Norberto.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
-		with multiprocessing.Pool(number_of_processes) as p:
-			p.starmap(
-				jitter_calculation_beta_scan,
-				[(bur,thrshld,frc) for bur,thrshld,frc in zip(subruns, [CFD_thresholds]*len(subruns), [force_calculation_on_submeasurements]*len(subruns))]
-			)
+		if number_of_processes == 1:
+			for subrun in subruns:
+				jitter_calculation_beta_scan(
+					bureaucrat = subrun,
+					CFD_thresholds = CFD_thresholds,
+					force = force_calculation_on_submeasurements,
+				)
+		else:
+			with multiprocessing.Pool(number_of_processes) as p:
+				p.starmap(
+					jitter_calculation_beta_scan,
+					[(bur,thrshld,frc) for bur,thrshld,frc in zip(subruns, [CFD_thresholds]*len(subruns), [force_calculation_on_submeasurements]*len(subruns))]
+				)
 		
 		jitter = read_jitter_data(bureaucrat)
 		
@@ -510,14 +518,14 @@ def read_jitter_data(bureaucrat:RunBureaucrat):
 	else:
 		raise RuntimeError(f'Dont know how to read the jitter in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}')
 
-def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
+def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False, number_of_processes:int=1):
 	Nestor = bureaucrat
 	if Nestor.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		jitter_calculation_beta_scan_sweeping_voltage(
 			bureaucrat = Nestor,
 			CFD_thresholds = CFD_thresholds,
 			force_calculation_on_submeasurements = force,
-			number_of_processes = max(multiprocessing.cpu_count()-1,1),
+			number_of_processes = number_of_processes,
 		)
 	elif Nestor.was_task_run_successfully('beta_scan'):
 		jitter_calculation_beta_scan(
@@ -560,4 +568,5 @@ if __name__ == '__main__':
 		RunBureaucrat(Path(args.directory)),
 		CFD_thresholds = {'DUT': 'best', 'MCP-PMT': 20},
 		force = args.force,
+		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)

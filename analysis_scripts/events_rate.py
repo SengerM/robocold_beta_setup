@@ -150,11 +150,15 @@ def events_rate_vs_bias_voltage(bureaucrat:RunBureaucrat, n_bootstraps:int=99, n
 	with bureaucrat.handle_task('events_rate_vs_bias_voltage') as employee:
 		subruns = bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
 		if force == True:
-			with multiprocessing.Pool(number_of_processes) as p:
-				p.starmap(
-					events_rate,
-					[(bur,n_btstrps) for bur,n_btstrps in zip(subruns, [n_bootstraps]*len(subruns))]
-				)
+			if number_of_processes == 1:
+				for subrun in subruns:
+					events_rate(bureaucrat = subrun, n_bootstraps = n_bootstraps)
+			else:
+				with multiprocessing.Pool(number_of_processes) as p:
+					p.starmap(
+						events_rate,
+						[(bur,n_btstrps) for bur,n_btstrps in zip(subruns, [n_bootstraps]*len(subruns))]
+					)
 		
 		rates = read_events_rate(bureaucrat)
 		
