@@ -147,6 +147,7 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 	with the_setup.hold_signal_acquisition(who=name_to_access_to_the_setup), the_setup.hold_control_of_bias_for_slot_number(slot_number, who=name_to_access_to_the_setup), the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
 		if not silent:
 			print('Control of hardware acquired.')
+		the_setup.set_trigger_for_beta_scans(who=name_to_access_to_the_setup)
 		with John.handle_task('beta_scan') as beta_scan_task_bureaucrat:
 			with open(beta_scan_task_bureaucrat.path_to_directory_of_my_task/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
@@ -293,69 +294,3 @@ def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_
 						silent = silent,
 					)
 					reporter.update(1)
-
-def automatic_beta_scans(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, beta_scans_configuration_df:pandas.DataFrame, silent:bool=False):
-	"""Perform automatic beta scans.
-	"""
-	the_setup = connect_me_with_the_setup()
-	Ramona = bureaucrat
-	with Ramona.handle_task('automatic_beta_scans', drop_old_data=False) as Ramonas_employee:
-		if not silent:
-			print(f'Waiting to acquire control of Robocold...')
-		with the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
-			if not silent:
-				print('Control of Robocold acquired!')
-			for slot_number in beta_scans_configuration_df.index.unique():
-				if not silent:
-					print(f'Reseting robocold...')
-				the_setup.reset_robocold(who=name_to_access_to_the_setup)
-				the_setup.set_oscilloscope_vdiv(
-					oscilloscope_channel_number = the_setup.get_oscilloscope_configuration_df().loc['DUT','n_channel'], 
-					vdiv = beta_scans_configuration_df.loc[slot_number,'Oscilloscope vertical scale (V/DIV)'].max(),
-					who = name_to_access_to_the_setup,
-				)
-				if not silent:
-					print(f'Starting beta scans sweeping bias voltage on slot {slot_number}...')
-				John = Ramonas_employee.create_subrun(f'{create_a_timestamp()}_BetaScanSweepingBiasVoltage_{the_setup.get_name_of_device_in_slot_number(slot_number)}')
-				beta_scan_sweeping_bias_voltage(
-					bureaucrat = John,
-					name_to_access_to_the_setup = name_to_access_to_the_setup,
-					slot_number = slot_number,
-					n_triggers_per_voltage = beta_scans_configuration_df.loc[slot_number,'n_triggers'], 
-					bias_voltages = beta_scans_configuration_df.loc[slot_number,'Bias voltage (V)'],
-					software_triggers = beta_scans_configuration_df.loc[slot_number,'software_trigger'],
-					silent = silent,
-				)
-				if not silent:
-					print(f'Beta scan sweeping bias voltage on slot {slot_number} finished.')
-
-if __name__=='__main__':
-	import os
-	from configuration_files.current_run import Alberto
-	PATH_TO_ANALYSIS_SCRIPTS = Path(__file__).resolve().parent.parent/'analysis_scripts'
-	import sys
-	sys.path.append(str(PATH_TO_ANALYSIS_SCRIPTS))
-	from plot_beta_scan import plot_everything_from_beta_scan
-	from utils import create_a_timestamp
-	
-	def software_trigger(signals_dict, minimum_DUT_amplitude:float):
-		DUT_signal = signals_dict['DUT']
-		PMT_signal = signals_dict['MCP-PMT']
-		try:
-			is_peak_in_correct_time_window = 1e-9 < float(DUT_signal.find_time_at_rising_edge(50)) - float(PMT_signal.find_time_at_rising_edge(50)) < 5.5e-9
-		except Exception:
-			is_peak_in_correct_time_window = False
-		is_DUT_amplitude_above_threshold = DUT_signal.amplitude > minimum_DUT_amplitude
-		return is_peak_in_correct_time_window and is_DUT_amplitude_above_threshold
-	
-	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
-	beta_scans_configuration_df = load_beta_scans_configuration()
-	beta_scans_configuration_df['software_trigger'] = lambda x: software_trigger(x, 0)
-	
-	with Alberto.handle_task('beta_scans', drop_old_data=False) as beta_scans_task_bureaucrat:
-		John = beta_scans_task_bureaucrat.create_subrun(create_a_timestamp() + '_' + input('Measurement name? ').replace(' ','_'))
-		automatic_beta_scans(
-			bureaucrat = John, 
-			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
-			beta_scans_configuration_df = beta_scans_configuration_df,
-		)

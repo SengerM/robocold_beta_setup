@@ -376,6 +376,7 @@ class TheRobocoldBetaSetup:
 			MCP_PMT_channel = f'C{self.oscilloscope_configuration_df.loc["MCP-PMT","n_channel"]}'
 			self._oscilloscope.set_trig_source(source=MCP_PMT_channel)
 			self._oscilloscope.set_trig_level(trig_source=MCP_PMT_channel, level=50e-3)
+			self._oscilloscope.sampling_mode_sequence(status='off')
 	
 	def configure_oscilloscope_for_auto_trigger_study(self, who:str, trigger_level:float, timeout_seconds:float, n_measurements_per_trigger:int):
 		"""Configures the trigger for the auto trigger study."""
