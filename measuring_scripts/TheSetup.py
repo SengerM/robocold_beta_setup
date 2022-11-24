@@ -385,6 +385,11 @@ class TheRobocoldBetaSetup:
 			self._oscilloscope.set_trig_level(trig_source=source, level=-abs(trigger_level))
 			self._oscilloscope.set_sequence_timeout(sequence_timeout=timeout_seconds, enable_sequence_timeout=True)
 			self._oscilloscope.sampling_mode_sequence(status='on', number_of_segments=n_measurements_per_trigger)
+			self.set_oscilloscope_vdiv(
+				oscilloscope_channel_number = self.oscilloscope_configuration_df.loc['DUT','n_channel'],
+				vdiv = 11e-3,
+				who = who,
+			)
 	
 	def set_trigger_source(self, signal_name:str, who:str):
 		"""Change the trigger source for the oscilloscope.
