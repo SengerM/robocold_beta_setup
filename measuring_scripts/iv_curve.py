@@ -58,6 +58,7 @@ def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n
 					except Exception as e:
 						if '#BD:00,VAL:ERR' in str(e):
 							warnings.warn(f'Cannot measure slot {slot_number} at voltage {voltage}, reason: `{e}`, will skip this point.')
+							reporter.update(n_measurements_per_voltage)
 							continue
 						else:
 							raise e
