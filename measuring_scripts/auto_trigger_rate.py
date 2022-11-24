@@ -55,7 +55,7 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 					try:
 						fit_params = fit_exponential_to_time_differences(time_differences=times_between_triggers, measurement_seconds=triggers_times[-1])
 						
-						if fit_params['Offset (s)'] > 10e-6:
+						if fit_params['Offset (s)'] > 111e-6:
 							# This I do because:
 							# 1) The time it takes our current oscilloscope (LeCroy 9254M) to trigger
 							#    again is less than 1 µs, and the resolution seems to be 1 µs. So if 
@@ -110,6 +110,11 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 						'Offset (s)': float('NaN'),
 					}
 				fit_params['n_bootstrap'] = n_bootstrap
+				fit_params['Bias voltage (V)'] = the_setup.measure_bias_voltage(slot_number=slot_number)
+				fit_params['Bias current (A)'] = the_setup.measure_bias_current(slot_number=slot_number)
+				fit_params['Temperature (°C)'] = the_setup.measure_temperature()
+				fit_params['Humidity (%RH)'] = the_setup.measure_humidity()
+				fit_params['Trigger level (V)'] = trigger_level
 				measurements_results.append(fit_params)
 				
 			measurements_results = pandas.DataFrame.from_records(measurements_results).set_index('n_bootstrap')
@@ -137,43 +142,47 @@ def auto_trigger_rate_sweeping_trigger_level(bureaucrat:RunBureaucrat, name_to_a
 	the_setup = connect_me_with_the_setup()
 	
 	with bureaucrat.handle_task('auto_trigger_rate_sweeping_trigger_level',drop_old_data=False) as employee:
-		# ~ for trigger_level in trigger_levels:
-			# ~ if not silent:
-				# ~ print(f'Measuring at trigger level {trigger_level}...')
-			# ~ auto_trigger_rate(
-				# ~ bureaucrat = employee.create_subrun(f'{bureaucrat.run_name}_Threshold{trigger_level*1e3:.2f}mV'), 
-				# ~ name_to_access_to_the_setup = name_to_access_to_the_setup,
-				# ~ slot_number = slot_number,
-				# ~ bias_voltage = bias_voltage,
-				# ~ trigger_level = trigger_level,
-				# ~ n_bootstraps = n_bootstraps,
-				# ~ timeout_seconds = timeout_seconds,
-				# ~ n_measurements_per_trigger = n_measurements_per_trigger,
-				# ~ silent = silent,
-			# ~ )
+		for trigger_level in trigger_levels:
+			if not silent:
+				print(f'Measuring at trigger level {trigger_level}...')
+			auto_trigger_rate(
+				bureaucrat = employee.create_subrun(f'{bureaucrat.run_name}_Threshold{trigger_level*1e3:.2f}mV'), 
+				name_to_access_to_the_setup = name_to_access_to_the_setup,
+				slot_number = slot_number,
+				bias_voltage = bias_voltage,
+				trigger_level = trigger_level,
+				n_bootstraps = n_bootstraps,
+				timeout_seconds = timeout_seconds,
+				n_measurements_per_trigger = n_measurements_per_trigger,
+				silent = silent,
+			)
+		
 		data = read_auto_trigger_rate(bureaucrat)
 		
-		rate = data.query('variable == "Rate (events s^-1)"').set_index('type',append=True)
-		rate = rate.unstack()['value']
-		rate.columns = [f'Rate (events s^-1) {col}'.replace(' value','') for col in rate.columns]
-		rate.columns.name = None
+		dfs = []
+		for variable in set(data['variable']):
+			_ = data.query(f'variable == "{variable}"').set_index('type',append=True)
+			_ = _.unstack()['value']
+			_.columns = [f'{variable} {col}'.replace(' value','') for col in _.columns]
+			_.columns.name = None
+			dfs.append(_)
+		data = pandas.concat(dfs, axis=1)
 		
-		offset = data.query('variable == "Offset (s)"').set_index('type',append=True)
-		offset = offset.unstack()['value']
-		offset.columns = [f'Offset (s) {col}'.replace(' value','') for col in offset.columns]
-		offset.columns.name = None
-		
-		data = pandas.concat([rate,offset], axis=1)
+		data.to_csv(employee.path_to_directory_of_my_task/'data.csv')
+		data.to_pickle(employee.path_to_directory_of_my_task/'data.pickle')
 		
 		for var in {'Rate (events s^-1)','Offset (s)'}:
 			fig = grafica.plotly_utils.utils.line(
-				title = f'Rate vs trigger threshold',
-				data_frame = data.reset_index(drop=False).sort_values('run_name'),
+				title = f'Auto trigger rate vs trigger threshold<br><sup>Run: {bureaucrat.run_name}</sup>',
+				data_frame = data.reset_index(drop=False).sort_values('Trigger level (V)'),
 				y = var,
 				error_y = f'{var} error',
-				x = 'run_name',
+				x = 'Trigger level (V)',
 				markers = True,
 				log_y = True if 'rate' in var.lower() else False,
+				labels = {
+					'Rate (events s^-1)': 'Rate (triggers/s)',
+				}
 			)
 			fig.write_html(
 				employee.path_to_directory_of_my_task/(var.split(' ')[0] + '.html'),
@@ -209,16 +218,16 @@ if __name__ == '__main__':
 	NAME_TO_ACCESS_TO_THE_SETUP = f'auto trigger rate PID: {os.getpid()}'
 	
 	with Alberto.handle_task('auto_trigger', drop_old_data=False) as employee:
-		John = employee.create_subrun('just_testing_average')
+		John = employee.create_subrun('just_testing')
 		auto_trigger_rate_sweeping_trigger_level(
 			bureaucrat = John, 
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 			slot_number = 1,
 			bias_voltage = 300,
-			trigger_levels = [2e-3,5e-3,8e-3,13e-3],
+			trigger_levels = [i*1e-3 for i in [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]],
 			n_bootstraps = 44,
 			timeout_seconds = 1,
-			n_measurements_per_trigger = 1111,
+			n_measurements_per_trigger = 111,
 			silent = False,
 		)
 	
