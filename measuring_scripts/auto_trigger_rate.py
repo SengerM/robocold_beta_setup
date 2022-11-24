@@ -11,6 +11,7 @@ sys.path.append('../analysis_scripts')
 from events_rate import fit_exponential_to_time_differences
 from scipy.stats import expon
 import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
+import warnings
 
 def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, bias_voltage:float, trigger_level:float, n_bootstraps:int, timeout_seconds:float, n_measurements_per_trigger:int, silent:bool=True):
 	the_setup = connect_me_with_the_setup()
@@ -139,14 +140,13 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 			final_results.to_pickle(employee.path_to_directory_of_my_task/'results.pickle')
 
 def auto_trigger_rate_sweeping_trigger_level(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, bias_voltage:float, trigger_levels:list, n_bootstraps:int, timeout_seconds:float, n_measurements_per_trigger:int, silent:bool=True):
-	the_setup = connect_me_with_the_setup()
-	
-	with bureaucrat.handle_task('auto_trigger_rate_sweeping_trigger_level',drop_old_data=False) as employee:
-		for trigger_level in trigger_levels:
+	with bureaucrat.handle_task('auto_trigger_rate_sweeping_trigger_level') as employee:
+		for trigger_level in sorted(trigger_levels):
 			if not silent:
 				print(f'Measuring at trigger level {trigger_level}...')
+			b = employee.create_subrun(f'{bureaucrat.run_name}_Threshold{trigger_level*1e3:.2f}mV')
 			auto_trigger_rate(
-				bureaucrat = employee.create_subrun(f'{bureaucrat.run_name}_Threshold{trigger_level*1e3:.2f}mV'), 
+				bureaucrat = b,
 				name_to_access_to_the_setup = name_to_access_to_the_setup,
 				slot_number = slot_number,
 				bias_voltage = bias_voltage,
@@ -156,7 +156,13 @@ def auto_trigger_rate_sweeping_trigger_level(bureaucrat:RunBureaucrat, name_to_a
 				n_measurements_per_trigger = n_measurements_per_trigger,
 				silent = silent,
 			)
-		
+			_ = read_auto_trigger_rate(b)
+			if numpy.isnan(_.loc['value','Rate (events s^-1)']):
+				# If the current trigger level could not measure anything it does not make sense to keep on measuring with higher thresholds, they will not be able to observe anything.
+				warnings.warn(f'While measuring auto trigger rate with trigger level {trigger_level} the rate could not be measured. This is probably because the auto trigger rate is already too low and so I will not measure higher values of thershold because it just doesnt make sense.')
+				break
+	
+	with bureaucrat.handle_task('auto_trigger_rate_sweeping_trigger_level', drop_old_data=False) as employee:	
 		data = read_auto_trigger_rate(bureaucrat)
 		
 		dfs = []
@@ -189,10 +195,61 @@ def auto_trigger_rate_sweeping_trigger_level(bureaucrat:RunBureaucrat, name_to_a
 				include_plotlyjs = 'cdn',
 			)
 
+def auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, bias_voltages:list, trigger_levels:list, n_bootstraps:int, timeout_seconds:float, n_measurements_per_trigger:int, silent:bool=True):
+	with bureaucrat.handle_task('auto_trigger_rate_sweeping_trigger_level_and_bias_voltage') as employee:
+		for bias_voltage in bias_voltages:
+			if not silent:
+				print(f'Measuring at bias voltage {bias_voltage} V...')
+			auto_trigger_rate_sweeping_trigger_level(
+				bureaucrat = employee.create_subrun(f'{bureaucrat.run_name}_Bias{int(bias_voltage)}V'), 
+				name_to_access_to_the_setup = name_to_access_to_the_setup,
+				slot_number = slot_number,
+				bias_voltage = bias_voltage,
+				trigger_levels = trigger_levels,
+				n_bootstraps = n_bootstraps,
+				timeout_seconds = timeout_seconds,
+				n_measurements_per_trigger = n_measurements_per_trigger,
+				silent = silent,
+			)
+	
+	with bureaucrat.handle_task('auto_trigger_rate_sweeping_trigger_level_and_bias_voltage',drop_old_data=False) as employee:
+		data = read_auto_trigger_rate(bureaucrat)
+		
+		dfs = []
+		for variable in set(data['variable']):
+			_ = data.query(f'variable == "{variable}"').set_index('type',append=True)
+			_ = _.unstack()['value']
+			_.columns = [f'{variable} {col}'.replace(' value','') for col in _.columns]
+			_.columns.name = None
+			dfs.append(_)
+		data = pandas.concat(dfs, axis=1)
+		
+		data.to_csv(employee.path_to_directory_of_my_task/'data.csv')
+		data.to_pickle(employee.path_to_directory_of_my_task/'data.pickle')
+		
+		for var in {'Rate (events s^-1)','Offset (s)'}:
+			fig = grafica.plotly_utils.utils.line(
+				title = f'Auto trigger rate vs trigger threshold<br><sup>Run: {bureaucrat.run_name}</sup>',
+				data_frame = data.reset_index(drop=False).sort_values(['Trigger level (V)','Bias voltage (V)']),
+				color = 'run_name bias_voltage_scan',
+				y = var,
+				error_y = f'{var} error',
+				x = 'Trigger level (V)',
+				markers = True,
+				log_y = True if 'rate' in var.lower() else False,
+				labels = {
+					'Rate (events s^-1)': 'Rate (triggers/s)',
+				}
+			)
+			fig.write_html(
+				employee.path_to_directory_of_my_task/(var.split(' ')[0] + '.html'),
+				include_plotlyjs = 'cdn',
+			)
+
 def read_auto_trigger_rate(bureaucrat:RunBureaucrat):
 	if bureaucrat.was_task_run_successfully('auto_trigger_rate'):
 		return pandas.read_pickle(bureaucrat.path_to_directory_of_task('auto_trigger_rate')/'results.pickle')
-	elif True:#bureaucrat.was_task_run_successfully('auto_trigger_rate_sweeping_trigger_level'):
+	elif bureaucrat.was_task_run_successfully('auto_trigger_rate_sweeping_trigger_level'):
 		data = []
 		for subrun in bureaucrat.list_subruns_of_task('auto_trigger_rate_sweeping_trigger_level'):
 			_ = read_auto_trigger_rate(subrun)
@@ -207,6 +264,14 @@ def read_auto_trigger_rate(bureaucrat:RunBureaucrat):
 			data.append(_)
 		data = pandas.concat(data)
 		return data
+	elif True:#bureaucrat.was_task_run_successfully('auto_trigger_rate_sweeping_trigger_level_and_bias_voltage'):
+		data = []
+		for subrun in bureaucrat.list_subruns_of_task('auto_trigger_rate_sweeping_trigger_level_and_bias_voltage'):
+			_ = read_auto_trigger_rate(subrun)
+			_['run_name bias_voltage_scan'] = subrun.run_name
+			_.set_index('run_name bias_voltage_scan', append=True, inplace=True)
+			data.append(_)
+		return pandas.concat(data)
 	else:
 		raise RuntimeError(f'Dont know how to read the auto trigger rate in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}')
 
@@ -218,16 +283,16 @@ if __name__ == '__main__':
 	NAME_TO_ACCESS_TO_THE_SETUP = f'auto trigger rate PID: {os.getpid()}'
 	
 	with Alberto.handle_task('auto_trigger', drop_old_data=False) as employee:
-		John = employee.create_subrun('just_testing')
-		auto_trigger_rate_sweeping_trigger_level(
+		John = employee.create_subrun('test_2')
+		auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(
 			bureaucrat = John, 
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 			slot_number = 1,
-			bias_voltage = 300,
-			trigger_levels = [i*1e-3 for i in [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]],
-			n_bootstraps = 44,
-			timeout_seconds = 1,
-			n_measurements_per_trigger = 111,
+			bias_voltages = [250,280,300,310,315],
+			trigger_levels = numpy.logspace(numpy.log10(2e-3),numpy.log10(70e-3),111),
+			n_bootstraps = 11,
+			timeout_seconds = .1,
+			n_measurements_per_trigger = 1111,
 			silent = False,
 		)
 	
