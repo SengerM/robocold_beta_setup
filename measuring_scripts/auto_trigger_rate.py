@@ -27,7 +27,13 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 		with bureaucrat.handle_task('auto_trigger_rate') as employee:
 			if not silent:
 				print('Removing the beta source from the DUT...')
-			the_setup.move_to_slot(slot_number=3, who=name_to_access_to_the_setup)
+			slot_position = the_setup.get_slots_configuration_df().loc[slot_number,'position_long_stage']
+			ROBOCOLD_MAX_POSITION = 19100
+			the_setup.set_robocold_position( # This should move the beta source to the farthest most position.
+				position = (int((slot_position+ROBOCOLD_MAX_POSITION/2)%ROBOCOLD_MAX_POSITION), 0), # (long, short)
+				who = name_to_access_to_the_setup,
+			)
+			
 			if not silent:
 				print('Setting bias voltage...')
 			the_setup.set_bias_voltage(slot_number=slot_number, volts=bias_voltage, who=name_to_access_to_the_setup)
@@ -283,7 +289,7 @@ if __name__ == '__main__':
 	NAME_TO_ACCESS_TO_THE_SETUP = f'auto trigger rate PID: {os.getpid()}'
 	
 	with Alberto.handle_task('auto_trigger', drop_old_data=False) as employee:
-		John = employee.create_subrun('test_2')
+		John = employee.create_subrun(create_a_timestamp() + '_test')
 		auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(
 			bureaucrat = John, 
 			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
