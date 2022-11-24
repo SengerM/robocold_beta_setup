@@ -86,7 +86,7 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 					
 					if numpy.random.rand() < 5/n_bootstraps: # Do a plot for this iteration.
 						fig = px.ecdf(
-							title = f'Auto trigger rate measurement (n_bootstrap={n_bootstrap}<br><sup>{bureaucrat.run_name}</sup>',
+							title = f'Auto trigger rate measurement (n_bootstrap={n_bootstrap})<br><sup>{bureaucrat.run_name}</sup>',
 							x = times_between_triggers,
 						)
 						x_axis_values = numpy.logspace(max(numpy.log10(min(times_between_triggers)),-7),numpy.log10(max(times_between_triggers)))
