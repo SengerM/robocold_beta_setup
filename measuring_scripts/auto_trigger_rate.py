@@ -45,6 +45,8 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 				n_measurements_per_trigger = n_measurements_per_trigger,
 			)
 			
+			the_setup.connect_slot_to_oscilloscope(slot_number=slot_number, who=name_to_access_to_the_setup)
+			
 			measurements_results = []
 			for n_bootstrap in range(n_bootstraps):
 				if not silent:
