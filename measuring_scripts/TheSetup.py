@@ -336,10 +336,10 @@ class TheRobocoldBetaSetup:
 			source = self._oscilloscope.get_trig_source()
 			self._oscilloscope.set_trig_level(trig_source=source, level=level)
 	
-	def wait_for_trigger(self, who:str):
+	def wait_for_trigger(self, who:str, timeout:float=-1):
 		"""Blocks execution until there is a trigger in the oscilloscope."""
 		with self._signal_acquisition_Lock(who), self._oscilloscope_Lock:
-			self._oscilloscope.wait_for_single_trigger()
+			self._oscilloscope.wait_for_single_trigger(timeout=timeout)
 	
 	def get_waveform(self, oscilloscope_channel_number:int)->dict:
 		"""Gets a waveform from the oscilloscope.
@@ -356,6 +356,49 @@ class TheRobocoldBetaSetup:
 		"""
 		with self._oscilloscope_Lock:
 			return self._oscilloscope.get_waveform(channel=oscilloscope_channel_number)
+	
+	def get_triggers_times(self):
+		"""Gets a list of trigger times measured in seconds since the
+		first of all the triggers.
+		
+		Returns
+		-------
+		trigger_times: list
+			A list of trigger times in seconds from the first trigger.
+		"""
+		with self._oscilloscope_Lock:
+			return self._oscilloscope.get_triggers_times(channel=self.oscilloscope_configuration_df.loc['MCP-PMT','n_channel'])
+	
+	def set_trigger_for_beta_scans(self, who:str):
+		"""Configures the trigger in the 'as usual' way for doing beta
+		scans. This means 50 mV in the MCP-PMT channel."""
+		with self._signal_acquisition_Lock(who), self._oscilloscope_Lock:
+			MCP_PMT_channel = f'C{self.oscilloscope_configuration_df.loc["MCP-PMT","n_channel"]}'
+			self._oscilloscope.set_trig_source(source=MCP_PMT_channel)
+			self._oscilloscope.set_trig_level(trig_source=MCP_PMT_channel, level=50e-3)
+	
+	def configure_oscilloscope_for_auto_trigger_study(self, who:str, trigger_level:float, timeout_seconds:float, n_measurements_per_trigger:int):
+		"""Configures the trigger for the auto trigger study."""
+		with self._signal_acquisition_Lock(who), self._oscilloscope_Lock:
+			self.set_trigger_source(signal_name='DUT', who=who)
+			source = self._oscilloscope.get_trig_source()
+			self._oscilloscope.set_trig_level(trig_source=source, level=-abs(trigger_level))
+			self._oscilloscope.set_sequence_timeout(sequence_timeout=timeout_seconds, enable_sequence_timeout=True)
+			self._oscilloscope.sampling_mode_sequence(status='on', number_of_segments=n_measurements_per_trigger)
+	
+	def set_trigger_source(self, signal_name:str, who:str):
+		"""Change the trigger source for the oscilloscope.
+		
+		Arguments
+		---------
+		signal_name: str
+			Name of the signal on which to trigger. E.g. `"MCP-PMT"` or `"DUT"`.
+		"""
+		if signal_name not in self.oscilloscope_configuration_df.index.get_level_values('signal_name'):
+			raise ValueError(f'Signal named {repr(signal_name)} not present in this setup. Available signal names (as defined by the oscilloscope configuration file) are {self.oscilloscope_configuration_df.index.get_level_values("signal_name")}.')
+		with self._signal_acquisition_Lock(who), self._oscilloscope_Lock:
+			channel = f'C{self.oscilloscope_configuration_df.loc[signal_name,"n_channel"]}'
+			self._oscilloscope.set_trig_source(source=channel)
 	
 	# Temperature and humidity sensor ----------------------------------
 	
