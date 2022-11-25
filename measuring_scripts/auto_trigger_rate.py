@@ -13,7 +13,7 @@ from scipy.stats import expon
 import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
 import warnings
 
-def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, bias_voltage:float, trigger_level:float, n_bootstraps:int, timeout_seconds:float, n_measurements_per_trigger:int, silent:bool=True):
+def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, bias_voltage:float, trigger_level:float, n_bootstraps:int, timeout_seconds:float, n_measurements_per_trigger:int, maximum_timeout_seconds:float=10, silent:bool=True):
 	the_setup = connect_me_with_the_setup()
 	
 	if not isinstance(trigger_level, (int,float)):
@@ -52,7 +52,7 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 				if not silent:
 					print(f'Measuring data for n_bootstrap {n_bootstrap}/{n_bootstraps-1}...')
 				try:
-					the_setup.wait_for_trigger(who=name_to_access_to_the_setup, timeout=timeout_seconds*(n_measurements_per_trigger+1))
+					the_setup.wait_for_trigger(who=name_to_access_to_the_setup, timeout=min(timeout_seconds*(n_measurements_per_trigger+1), maximum_timeout_seconds))
 					triggers_times = the_setup.get_triggers_times()
 				except RuntimeError as e:
 					if 'Timed out waiting for oscilloscope to trigger' in str(e):

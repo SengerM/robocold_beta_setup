@@ -25,10 +25,10 @@ def automatic_measurements(bureaucrat:RunBureaucrat, name_to_access_to_the_setup
 					bureaucrat = John,
 					name_to_access_to_the_setup = name_to_access_to_the_setup,
 					slot_number = slot_number,
-					bias_voltages = beta_scans_configuration_df.loc[slot_number,'Bias voltage (V)'],
+					bias_voltages = list(beta_scans_configuration_df.loc[slot_number,'Bias voltage (V)']) + [0], # Adding 0 V because that should be only the electronic noise.
 					trigger_levels = numpy.array(sorted(set((numpy.logspace(numpy.log10(2e-3),numpy.log10(70e-3),44)*1e4).astype(int))))/1e4,
 					n_bootstraps = 11,
-					timeout_seconds = 1,
+					timeout_seconds = 2,
 					n_measurements_per_trigger = 1111,
 					silent = silent,
 				)
@@ -79,6 +79,10 @@ if __name__=='__main__':
 	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
 	beta_scans_configuration_df = load_beta_scans_configuration()
 	beta_scans_configuration_df['software_trigger'] = lambda x: software_trigger(x, 0)
+	
+	the_setup = connect_me_with_the_setup()
+	for slot_number in beta_scans_configuration_df.index.unique():
+		the_setup.set_current_compliance(slot_number=slot_number, amperes=99e-6, who=NAME_TO_ACCESS_TO_THE_SETUP)
 	
 	automatic_measurements(
 		bureaucrat = Alberto,
