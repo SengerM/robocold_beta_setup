@@ -193,7 +193,7 @@ if __name__=='__main__':
 	from utils import create_a_timestamp
 	
 	SLOTS = [1,2,3,4,5,6,7,8]
-	VOLTAGE_VALUES = list(numpy.linspace(0,777,99))
+	VOLTAGE_VALUES = list(numpy.linspace(0,500,99))
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = pandas.read_csv('configuration_files/standby_configuration.csv').set_index('slot_number')['Current compliance (A)'].to_dict()

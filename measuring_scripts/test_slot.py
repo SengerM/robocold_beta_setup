@@ -1,9 +1,9 @@
 from TheSetup import connect_me_with_the_setup
 import time
 
-SLOT_NUMBER = 2
-BIAS_VOLTAGE = 180
-CURRENT_COMPLIANCE = 10e-6
+SLOT_NUMBER = 5
+BIAS_VOLTAGE = 0
+CURRENT_COMPLIANCE = 33e-6
 ROBOCOLD_OFFSET = (0,0)
 
 the_setup = connect_me_with_the_setup()
