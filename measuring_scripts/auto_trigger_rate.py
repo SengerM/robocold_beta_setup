@@ -64,7 +64,7 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 					try:
 						fit_params = fit_exponential_to_time_differences(time_differences=times_between_triggers, measurement_seconds=triggers_times[-1])
 						
-						if fit_params['Offset (s)'] > 111e-6:
+						if abs(fit_params['Offset (s)']) > 111e-6:
 							# This I do because:
 							# 1) The time it takes our current oscilloscope (LeCroy 9254M) to trigger
 							#    again is less than 1 µs, and the resolution seems to be 1 µs. So if 
@@ -73,9 +73,9 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 							#    the oscilloscope always times-out, the fit tends to converge to a very
 							#    high offset value, which is clearly wrong and is only an artifact of the
 							#    very low statistics. In this case, however, usually we can approximate
-							#    offset = 0 and use the MLE estimator for the rate of an exponential. 
+							#    offset = 0 and use the MLE estimator for the rate of an exponential.
 							fit_params = {
-								'Rate (events s^-1)': numpy.nanmean(triggers_times)**-1,
+								'Rate (events s^-1)': numpy.nanmean(times_between_triggers)**-1,
 								'Offset (s)': 0,
 							}
 					except RuntimeError as e:
@@ -86,7 +86,7 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 							}
 							continue
 					
-					if numpy.random.rand() < 5/n_bootstraps: # Do a plot for this iteration.
+					if n_bootstrap == 0 or numpy.random.rand() < 5/n_bootstraps: # Do a plot for this iteration.
 						fig = px.ecdf(
 							title = f'Auto trigger rate measurement (n_bootstrap={n_bootstrap})<br><sup>{bureaucrat.run_name}</sup>',
 							x = times_between_triggers,
@@ -147,7 +147,7 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 			final_results.to_csv(employee.path_to_directory_of_my_task/'results.csv')
 			final_results.to_pickle(employee.path_to_directory_of_my_task/'results.pickle')
 
-def auto_trigger_rate_sweeping_trigger_level(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, bias_voltage:float, trigger_levels:list, n_bootstraps:int, timeout_seconds:float, n_measurements_per_trigger:int, silent:bool=True):
+def auto_trigger_rate_sweeping_trigger_level(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, bias_voltage:float, trigger_levels:list, n_bootstraps:int, timeout_seconds:float, n_measurements_per_trigger:int, maximum_timeout_seconds:float, silent:bool=True):
 	with bureaucrat.handle_task('auto_trigger_rate_sweeping_trigger_level') as employee:
 		for trigger_level in sorted(trigger_levels):
 			if not silent:
@@ -162,6 +162,7 @@ def auto_trigger_rate_sweeping_trigger_level(bureaucrat:RunBureaucrat, name_to_a
 				n_bootstraps = n_bootstraps,
 				timeout_seconds = timeout_seconds,
 				n_measurements_per_trigger = n_measurements_per_trigger,
+				maximum_timeout_seconds = maximum_timeout_seconds,
 				silent = silent,
 			)
 			_ = read_auto_trigger_rate(b)
@@ -203,7 +204,7 @@ def auto_trigger_rate_sweeping_trigger_level(bureaucrat:RunBureaucrat, name_to_a
 				include_plotlyjs = 'cdn',
 			)
 
-def auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, bias_voltages:list, trigger_levels:list, n_bootstraps:int, timeout_seconds:float, n_measurements_per_trigger:int, silent:bool=True):
+def auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, bias_voltages:list, trigger_levels:list, n_bootstraps:int, timeout_seconds:float, n_measurements_per_trigger:int, maximum_timeout_seconds:float, silent:bool=True):
 	with bureaucrat.handle_task('auto_trigger_rate_sweeping_trigger_level_and_bias_voltage') as employee:
 		for bias_voltage in bias_voltages:
 			if not silent:
@@ -217,6 +218,7 @@ def auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(bureaucrat:RunBure
 				n_bootstraps = n_bootstraps,
 				timeout_seconds = timeout_seconds,
 				n_measurements_per_trigger = n_measurements_per_trigger,
+				maximum_timeout_seconds = maximum_timeout_seconds,
 				silent = silent,
 			)
 	
@@ -301,6 +303,7 @@ if __name__ == '__main__':
 			n_bootstraps = 11,
 			timeout_seconds = .1,
 			n_measurements_per_trigger = 1111,
+			maximum_timeout_seconds = 30,
 			silent = False,
 		)
 	
