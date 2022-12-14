@@ -4,7 +4,7 @@ from pathlib import Path
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
-from grafica.plotly_utils.utils import scatter_histogram
+from grafica.plotly_utils.utils import scatter_histogram, set_my_template_as_default
 from scipy.stats import median_abs_deviation
 from scipy.optimize import curve_fit
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
@@ -546,7 +546,9 @@ def script_core(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False, numb
 
 if __name__ == '__main__':
 	import argparse
-
+	
+	set_my_template_as_default()
+	
 	parser = argparse.ArgumentParser()
 	parser.add_argument(
 		'--dir',
@@ -566,7 +568,7 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	script_core(
 		RunBureaucrat(Path(args.directory)),
-		CFD_thresholds = {'DUT': 'best', 'MCP-PMT': 20},
+		CFD_thresholds = {'DUT': 50, 'MCP-PMT': 20},
 		force = args.force,
 		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)

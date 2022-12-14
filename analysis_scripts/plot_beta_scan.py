@@ -8,7 +8,7 @@ from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github
 from scipy.stats import median_abs_deviation
 from scipy.optimize import curve_fit
 from landaupy import langauss, landau # https://github.com/SengerM/landaupy
-from grafica.plotly_utils.utils import scatter_histogram # https://github.com/SengerM/grafica
+from grafica.plotly_utils.utils import scatter_histogram, set_my_template_as_default # https://github.com/SengerM/grafica
 import warnings
 import dominate # https://github.com/Knio/dominate
 
@@ -208,26 +208,26 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 		
 		path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms')
 		path_to_save_plots.mkdir(exist_ok=True)
-		for col in {'Amplitude (V)','Collected charge (V s)'}:
-			fig = go.Figure()
-			fig.update_layout(
-				title = f'Langauss fit to {col}<br><sup>Run: {John.run_name}</sup>',
-				xaxis_title = col,
-				yaxis_title = 'count',
-			)
-			colors = iter(px.colors.qualitative.Plotly)
-			for signal_name in sorted(set(parsed_from_waveforms_df.index.get_level_values('signal_name'))):
-				draw_histogram_and_langauss_fit(
-					fig = fig,
-					parsed_from_waveforms_df = parsed_from_waveforms_df,
-					signal_name = signal_name,
-					column_name = col,
-					line_color = next(colors),
-				)
-			fig.write_html(
-				str(path_to_save_plots/Path(f'{col} langauss fit.html')),
-				include_plotlyjs = 'cdn',
-			)
+		# ~ for col in {'Amplitude (V)','Collected charge (V s)'}:
+			# ~ fig = go.Figure()
+			# ~ fig.update_layout(
+				# ~ title = f'Langauss fit to {col}<br><sup>Run: {John.run_name}</sup>',
+				# ~ xaxis_title = col,
+				# ~ yaxis_title = 'count',
+			# ~ )
+			# ~ colors = iter(px.colors.qualitative.Plotly)
+			# ~ for signal_name in sorted(set(parsed_from_waveforms_df.index.get_level_values('signal_name'))):
+				# ~ draw_histogram_and_langauss_fit(
+					# ~ fig = fig,
+					# ~ parsed_from_waveforms_df = parsed_from_waveforms_df,
+					# ~ signal_name = signal_name,
+					# ~ column_name = col,
+					# ~ line_color = next(colors),
+				# ~ )
+			# ~ fig.write_html(
+				# ~ str(path_to_save_plots/Path(f'{col} langauss fit.html')),
+				# ~ include_plotlyjs = 'cdn',
+			# ~ )
 		
 		for variables in {('t_50 (s)','Amplitude (V)')}:
 			fig = px.scatter(
@@ -302,7 +302,9 @@ def script_core(bureaucrat:RunBureaucrat):
 
 if __name__ == '__main__':
 	import argparse
-
+	
+	set_my_template_as_default()
+	
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--dir',
 		metavar = 'path', 

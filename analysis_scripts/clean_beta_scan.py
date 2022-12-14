@@ -8,6 +8,24 @@ import plotly.express as px
 import numpy as np
 from plot_beta_scan import draw_histogram_and_langauss_fit
 import dominate # https://github.com/Knio/dominate
+import grafica.plotly_utils.utils
+
+def create_cuts_file_template(bureaucrat:RunBureaucrat):
+	"""Creates a file `cuts.csv` in the run directory with the template
+	that is most commonly used.
+	"""
+	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+		path_to_cuts_file = bureaucrat.path_to_run_directory/'cuts.csv'
+		if path_to_cuts_file.is_file():
+			raise RuntimeError(f'A file with the cuts already exists.')
+		with open(path_to_cuts_file, 'w') as ofile:
+			print('run_name,signal_name,variable,cut_type,cut_value', file=ofile)
+			for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+				print(f'{subrun.run_name},DUT,Amplitude (V),lower,NaN', file=ofile)
+	elif bureaucrat.was_task_run_successfully('beta_scan'):
+		raise NotImplementedError(f'Not yet implemented for `beta_scan`.')
+	else:
+		raise RuntimeError(f'Dont know how to create cuts file template for run {repr(bureaucrat.run_name)}.')
 
 def apply_cuts(data_df, cuts_df):
 	"""
@@ -308,6 +326,8 @@ def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(burea
 
 if __name__ == '__main__':
 	import argparse
+	
+	grafica.plotly_utils.utils.set_my_template_as_default()
 
 	parser = argparse.ArgumentParser(description='Cleans a beta scan according to some criterion.')
 	parser.add_argument('--dir',

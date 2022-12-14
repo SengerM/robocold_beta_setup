@@ -1,6 +1,6 @@
 from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from pathlib import Path
-from clean_beta_scan import script_core as clean_beta_scan
+from clean_beta_scan import script_core as clean_beta_scan, create_cuts_file_template
 from collected_charge import script_core as collected_charge
 from jitter_calculation import script_core as jitter_calculation
 from time_resolution import script_core as time_resolution
@@ -8,7 +8,9 @@ from summarize_parameters import summarize_beta_scan_measured_stuff_recursively 
 from plot_iv_curves import IV_curve_from_beta_scan_data
 from noise_in_beta_scan import script_core as noise_in_beta_scan
 from events_rate import events_rate_vs_bias_voltage
+from plot_beta_scan import script_core as plot_beta_scan
 import multiprocessing
+import grafica.plotly_utils.utils
 
 def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, skip_charge:bool=False, skip_jitter:bool=False, force:bool=True, number_of_processes:int=1):
 	clean_beta_scan(bureaucrat)
@@ -38,6 +40,8 @@ def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, skip_charge:bool=False
 
 if __name__ == '__main__':
 	import argparse
+	
+	grafica.plotly_utils.utils.set_my_template_as_default()
 
 	parser = argparse.ArgumentParser(description='Cleans a beta scan according to some criterion.')
 	parser.add_argument('--dir',
@@ -57,6 +61,13 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	bureaucrat = RunBureaucrat(Path(args.directory))
+	
+	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage') and not (bureaucrat.path_to_run_directory/'cuts.csv').is_file():
+		create_cuts_file_template(bureaucrat)
+		print(f'`cuts.csv` file template was created on {repr(str(bureaucrat.path_to_run_directory))}.')
+		print(f'Will now exit, after doing the plots needed to configure the cuts...')
+		plot_beta_scan(bureaucrat)
+		exit()
 	
 	do_all(
 		bureaucrat,
