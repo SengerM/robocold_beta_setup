@@ -83,7 +83,7 @@ def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, transimpedance:panda
 			for signal_name in set(df.index.get_level_values('signal_name')):
 				successful_fit.append(False)
 				try:
-					popt, _, hist, bin_centers = binned_fit_langauss(df.loc[signal_name,'Collected charge (V s)'])
+					popt, _, hist, bin_centers = binned_fit_langauss(df.loc[signal_name,'Collected charge (V s)'], maxfev=99)
 					successful_fit[-1] = True
 					popts[signal_name] = popt # Need this to do the plot later on.
 					bin_centerss[signal_name] =  bin_centers # Need this to do the plot later on.
