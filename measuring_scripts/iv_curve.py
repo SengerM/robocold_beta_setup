@@ -58,6 +58,7 @@ def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n
 					except Exception as e:
 						if '#BD:00,VAL:ERR' in str(e):
 							warnings.warn(f'Cannot measure slot {slot_number} at voltage {voltage}, reason: `{e}`, will skip this point.')
+							reporter.update(n_measurements_per_voltage)
 							continue
 						else:
 							raise e
@@ -192,7 +193,7 @@ if __name__=='__main__':
 	from utils import create_a_timestamp
 	
 	SLOTS = [1,2,3,4,5,6,7,8]
-	VOLTAGE_VALUES = list(numpy.linspace(0,777,99))
+	VOLTAGE_VALUES = list(numpy.linspace(0,500,99))
 	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
 	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
 	CURRENT_COMPLIANCES = pandas.read_csv('configuration_files/standby_configuration.csv').set_index('slot_number')['Current compliance (A)'].to_dict()
