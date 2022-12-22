@@ -173,7 +173,6 @@ def plot_cfd(jitter_vs_kCFDs:pandas.Series, jitter_statistics:pandas.DataFrame):
 	0       54.0         5.163978           26.0            10.749677  5.203279e-11      2.563595e-12
 	```
 	"""
-	
 	pivot_table = jitter_vs_kCFDs.unstack()
 	fig = go.Figure(
 		data = go.Contour(
@@ -319,24 +318,15 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 				key_with_numeric_value = [key for key,item in CFD_thresholds.items() if isinstance(item, (int,float))][0]
 				key_with_best = [key for key,item in CFD_thresholds.items() if item=='best'][0]
 				position_of_key_with_numeric_value = [i for i in range(len(_.index.names)) if key_with_numeric_value in _.index.names[i]][0]
-				position_of_key_with_best = [i for i in range(len(_.index.names)) if key_with_best in _.index.names[i]][0]
-				if set([position_of_key_with_numeric_value,position_of_key_with_best]) != {0,1}:
-					raise RuntimeError(f'Check this error, this should have never happened.')
-				if position_of_key_with_numeric_value == 0:
-					_ = _.loc[CFD_thresholds[key_with_numeric_value],:,:]
-				elif position_of_key_with_numeric_value == 1:
-					_ = _.loc[:,CFD_thresholds[key_with_numeric_value],:]
-				else:
-					raise RuntimeError(f'Check this error, this should have never happened.')
+				_ = _.query(f'`{_.index.names[position_of_key_with_numeric_value]}`=={CFD_thresholds[key_with_numeric_value]}')
 				index_for_jitter = _.idxmin()
-			
 			jitters.append(_.loc[index_for_jitter])
 		jitters = pandas.concat(jitters)
 		jitters.reset_index(sorted(set(jitters.index.names)-{'k_bootstrap'}), drop=False, inplace=True)
 		
 		jitter_vs_kCFDs_statistics = jitter_vs_kCFDs.groupby(['k_DUT (%)','k_MCP-PMT (%)']).agg([np.mean,np.std])
 		jitters_statistics = jitters.agg([np.mean,np.std])
-		
+
 		jitter_vs_kCFDs_statistics.rename(columns={'mean':'', 'std':'error'},inplace=True)
 		jitter_vs_kCFDs_statistics.columns = [' '.join([_ for _ in col if _!='']) for col in jitter_vs_kCFDs_statistics.columns]
 		
@@ -348,7 +338,6 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 		jitter_vs_kCFDs_statistics.to_pickle(Norbertos_employee.path_to_directory_of_my_task/'jitter_vs_CFD.pickle')
 		
 		# Do some plots ---
-		
 		fig = plot_cfd(jitter_vs_kCFDs_statistics['Jitter (s)'], jitters_statistics)
 		fig.update_layout(
 			title = f'Jitter vs CFD<br><sup>Run: {bureaucrat.run_name}</sup>',
