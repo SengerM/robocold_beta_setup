@@ -54,7 +54,7 @@ def resample_measured_data(data_df):
 	resampled_df = data_df.reset_index(drop=False).pivot(
 		index = 'n_trigger',
 		columns = 'signal_name',
-		values = set(data_df.columns),
+		values = list(set(data_df.columns)),
 	)
 	resampled_df = resampled_df.sample(frac=1, replace=True)
 	resampled_df = resampled_df.stack()
