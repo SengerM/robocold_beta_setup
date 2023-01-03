@@ -336,9 +336,8 @@ def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
 		
 		x = data['Amplitude (V)']
 		x = x.dropna()
-		x = x[(x>=x.quantile(.05)) & (x<=x.quantile(.9))]
-		x = x.diff()
-		threshold_cut = x.max()
+		x = x[(x>=x.quantile(.05)) & (x<=x.quantile(.95))]
+		threshold_cut = data.loc[x.sort_values().diff().idxmax(),'Amplitude (V)']
 		
 		cuts = pandas.DataFrame(
 			{
