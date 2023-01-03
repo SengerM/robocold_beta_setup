@@ -332,8 +332,11 @@ def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
 	with bureaucrat.handle_task('automatic_cut_amplitude') as employee:
 		data = load_whole_dataframe(bureaucrat.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 		
+		data = data.query('signal_name=="DUT"')
+		
 		x = np.sort(data['Amplitude (V)'].to_numpy())
-		position_of_lower = np.argmax(np.diff(x[x<=np.nanmedian(x)]))
+		x = x[~np.isnan(x)]
+		position_of_lower = np.argmax(np.diff(x[x<=np.quantile(x, .9)]))
 		threshold_cut = x[position_of_lower:position_of_lower+2].mean()
 		
 		with open(employee.path_to_directory_of_my_task/'threshold.csv', 'w') as ofile:
@@ -341,14 +344,12 @@ def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
 		
 		fig = px.ecdf(
 			data['Amplitude (V)'],
+			title = f'Automatic threshold cut in amplitude<br><sup>{bureaucrat.run_name}</sup>',
 		)
-		fig.add_trace(
-			go.Scatter(
-				x = [threshold_cut]*2,
-				y = [0,1],
-				mode = 'lines',
-				name = 'Threshold',
-			)
+		fig.add_vline(
+			x = threshold_cut,
+			annotation_text = 'Threshold',
+			annotation_textangle = 90,
 		)
 		fig.write_html(
 			employee.path_to_directory_of_my_task/'cut_in_amplitude.html',
