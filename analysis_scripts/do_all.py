@@ -58,21 +58,28 @@ if __name__ == '__main__':
 		dest = 'force',
 		action = 'store_true'
 	)
+	parser.add_argument(
+		'--manual-cuts',
+		help = 'If this flag is passed, the script will guide you to define the cuts manually.',
+		required = False,
+		dest = 'manual_cuts',
+		action = 'store_true'
+	)
 
 	args = parser.parse_args()
 	bureaucrat = RunBureaucrat(Path(args.directory))
 	
 	path_to_cuts_file = None
-	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage') and not (bureaucrat.path_to_run_directory/'cuts.csv').is_file():
-		if input('Manually define cuts to clean the beta scans? (yes) ') != 'yes':
-			automatic_cuts(bureaucrat)
-			path_to_cuts_file = bureaucrat.path_to_directory_of_task('automatic_cuts')/'cuts.csv'
-		else:
+	if args.manual_cuts:
+		if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage') and not (bureaucrat.path_to_run_directory/'cuts.csv').is_file():
 			create_cuts_file_template(bureaucrat)
 			print(f'`cuts.csv` file template was created on {repr(str(bureaucrat.path_to_run_directory))}.')
 			print(f'Will now exit, after doing the plots needed to configure the cuts manually...')
 			plot_beta_scan(bureaucrat)
 			exit()
+	else:
+		automatic_cuts(bureaucrat)
+		path_to_cuts_file = bureaucrat.path_to_directory_of_task('automatic_cuts')/'cuts.csv'
 	
 	do_all(
 		bureaucrat,
