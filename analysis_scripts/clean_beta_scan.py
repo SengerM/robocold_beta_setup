@@ -276,13 +276,13 @@ def plots_of_clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, sca
 			with open(Ernestos_employee.path_to_directory_of_my_task/f'{plot_type} together.html', 'w') as ofile:
 				print(html_doc, file=ofile)
 
-def script_core(bureaucrat:RunBureaucrat):
+def script_core(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None):
 	John = bureaucrat
 	if John.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
-		clean_beta_scan_sweeping_bias_voltage(John)
+		clean_beta_scan_sweeping_bias_voltage(John, path_to_cuts_file=path_to_cuts_file)
 		plots_of_clean_beta_scan_sweeping_bias_voltage(John, langauss_plots=True)
 	elif John.was_task_run_successfully('beta_scan'):
-		clean_beta_scan(John)
+		clean_beta_scan(John, path_to_cuts_file=path_to_cuts_file)
 		clean_beta_scan_plots(John)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(John.run_name)} located in {John.path_to_run_directory}.')
@@ -326,7 +326,7 @@ def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(burea
 	return df
 
 def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
-	"""Automatically finds the threshold value for cuttin in the amplitude.
+	"""Automatically finds the threshold value for cutting in the amplitude.
 	"""
 	bureaucrat.check_these_tasks_were_run_successfully('beta_scan')
 	with bureaucrat.handle_task('automatic_cut_amplitude') as employee:
@@ -339,8 +339,16 @@ def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
 		position_of_lower = np.argmax(np.diff(x[x<=np.quantile(x, .9)]))
 		threshold_cut = x[position_of_lower:position_of_lower+2].mean()
 		
-		with open(employee.path_to_directory_of_my_task/'threshold.csv', 'w') as ofile:
-			print(threshold_cut, file=ofile)
+		cuts = pandas.DataFrame(
+			{
+				'signal_name': 'DUT',
+				'variable': 'Amplitude (V)',
+				'cut_type': 'lower',
+				'cut_value': threshold_cut,
+			},
+			index = [0],
+		)
+		cuts.to_csv(employee.path_to_directory_of_my_task/'cuts.csv', index=False)
 		
 		fig = px.ecdf(
 			data['Amplitude (V)'],
@@ -355,6 +363,44 @@ def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
 			employee.path_to_directory_of_my_task/'cut_in_amplitude.html',
 			include_plotlyjs = 'cdn',
 		)
+
+def automatic_cuts(bureaucrat:RunBureaucrat):
+	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	with bureaucrat.handle_task('automatic_cuts') as employee:
+		cuts = []
+		path_to_subplots = []
+		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			automatic_cut_amplitude(subrun)
+			df = pandas.read_csv(subrun.path_to_directory_of_task('automatic_cut_amplitude')/'cuts.csv')
+			df['run_name'] = subrun.run_name
+			cuts.append(df)
+			path_to_subplots.append(
+				pandas.DataFrame(
+					{
+						'path': Path('..')/(subrun.path_to_directory_of_task('automatic_cut_amplitude')/'cut_in_amplitude.html').relative_to(bureaucrat.path_to_run_directory),
+						'run_name': subrun.run_name,
+					},
+					index = [0],
+				).set_index('run_name', drop=True)
+			)
+		cuts = pandas.concat(cuts)
+		cuts.to_csv(employee.path_to_directory_of_my_task/'cuts.csv', index=False)
+		path_to_subplots = pandas.concat(path_to_subplots)
+		
+		document_title = f'Automatic amplitude cuts plots for {bureaucrat.run_name}'
+		html_doc = dominate.document(title=document_title)
+		with html_doc:
+			dominate.tags.h1(document_title)
+			with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
+				for i,row in path_to_subplots.sort_index().iterrows():
+					dominate.tags.iframe(
+						src = str(
+							row['path']
+						), 
+						style = f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;'
+					)
+		with open(employee.path_to_directory_of_my_task/f'automatic_cuts_plots.html', 'w') as ofile:
+			print(html_doc, file=ofile)
 
 if __name__ == '__main__':
 	import argparse
@@ -371,4 +417,4 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	automatic_cut_amplitude(RunBureaucrat(Path(args.directory)))
+	automatic_cuts(RunBureaucrat(Path(args.directory)))
