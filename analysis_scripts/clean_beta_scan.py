@@ -334,10 +334,11 @@ def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
 		
 		data = data.query('signal_name=="DUT"')
 		
-		x = np.sort(data['Amplitude (V)'].to_numpy())
-		x = x[~np.isnan(x)]
-		position_of_lower = np.argmax(np.diff(x[x<=np.quantile(x, .9)]))
-		threshold_cut = x[position_of_lower:position_of_lower+2].mean()
+		x = data['Amplitude (V)']
+		x = x.dropna()
+		x = x[(x>=x.quantile(.05)) & (x<=x.quantile(.9))]
+		x = x.diff()
+		threshold_cut = x.max()
 		
 		cuts = pandas.DataFrame(
 			{
