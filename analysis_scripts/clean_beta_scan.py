@@ -417,4 +417,4 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	automatic_cuts(RunBureaucrat(Path(args.directory)))
+	script_core(RunBureaucrat(Path(args.directory)))
