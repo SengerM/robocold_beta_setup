@@ -9,6 +9,7 @@ import numpy as np
 from plot_beta_scan import draw_histogram_and_langauss_fit
 import dominate # https://github.com/Knio/dominate
 import grafica.plotly_utils.utils
+from scipy.optimize import minimize
 
 def create_cuts_file_template(bureaucrat:RunBureaucrat):
 	"""Creates a file `cuts.csv` in the run directory with the template
@@ -279,7 +280,7 @@ def script_core(bureaucrat:RunBureaucrat):
 	John = bureaucrat
 	if John.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		clean_beta_scan_sweeping_bias_voltage(John)
-		plots_of_clean_beta_scan_sweeping_bias_voltage(John)
+		plots_of_clean_beta_scan_sweeping_bias_voltage(John, langauss_plots=True)
 	elif John.was_task_run_successfully('beta_scan'):
 		clean_beta_scan(John)
 		clean_beta_scan_plots(John)
@@ -324,6 +325,36 @@ def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(burea
 	)
 	return df
 
+def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
+	"""Automatically finds the threshold value for cuttin in the amplitude.
+	"""
+	bureaucrat.check_these_tasks_were_run_successfully('beta_scan')
+	with bureaucrat.handle_task('automatic_cut_amplitude') as employee:
+		data = load_whole_dataframe(bureaucrat.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
+		
+		x = np.sort(data['Amplitude (V)'].to_numpy())
+		position_of_lower = np.argmax(np.diff(x[x<=np.nanmedian(x)]))
+		threshold_cut = x[position_of_lower:position_of_lower+2].mean()
+		
+		with open(employee.path_to_directory_of_my_task/'threshold.csv', 'w') as ofile:
+			print(threshold_cut, file=ofile)
+		
+		fig = px.ecdf(
+			data['Amplitude (V)'],
+		)
+		fig.add_trace(
+			go.Scatter(
+				x = [threshold_cut]*2,
+				y = [0,1],
+				mode = 'lines',
+				name = 'Threshold',
+			)
+		)
+		fig.write_html(
+			employee.path_to_directory_of_my_task/'cut_in_amplitude.html',
+			include_plotlyjs = 'cdn',
+		)
+
 if __name__ == '__main__':
 	import argparse
 	
@@ -339,4 +370,4 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	script_core(RunBureaucrat(Path(args.directory)))
+	automatic_cut_amplitude(RunBureaucrat(Path(args.directory)))
