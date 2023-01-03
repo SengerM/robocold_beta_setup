@@ -64,7 +64,7 @@ if __name__ == '__main__':
 	
 	path_to_cuts_file = None
 	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage') and not (bureaucrat.path_to_run_directory/'cuts.csv').is_file():
-		if input('Automatically find cuts in amplitude? (yes) ') == 'yes':
+		if input('Manually define cuts to clean the beta scans? (yes) ') != 'yes':
 			automatic_cuts(bureaucrat)
 			path_to_cuts_file = bureaucrat.path_to_directory_of_task('automatic_cuts')/'cuts.csv'
 		else:
