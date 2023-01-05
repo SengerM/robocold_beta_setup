@@ -15,6 +15,7 @@ import warnings
 import multiprocessing
 from summarize_parameters import read_summarized_data
 from uncertainties import ufloat
+import dominate # https://github.com/Knio/dominate
 
 N_BOOTSTRAP = 99
 
@@ -83,7 +84,7 @@ def collected_charge_in_beta_scan(bureaucrat:RunBureaucrat, transimpedance:panda
 			for signal_name in set(df.index.get_level_values('signal_name')):
 				successful_fit.append(False)
 				try:
-					popt, _, hist, bin_centers = binned_fit_langauss(df.loc[signal_name,'Collected charge (V s)'])
+					popt, _, hist, bin_centers = binned_fit_langauss(df.loc[signal_name,'Collected charge (V s)'], maxfev=999)
 					successful_fit[-1] = True
 					popts[signal_name] = popt # Need this to do the plot later on.
 					bin_centerss[signal_name] =  bin_centers # Need this to do the plot later on.
@@ -264,6 +265,34 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, transimpedance:pa
 				str(task_handler.path_to_directory_of_my_task/'collected_charge_vs_bias_voltage_coulomb.html'),
 				include_plotlyjs = 'cdn',
 			)
+		
+		path_to_subplots = []
+		for subrun in Romina.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			path_to_subplots.append(
+				pandas.DataFrame(
+					{
+						'path': Path('..')/(subrun.path_to_directory_of_task('collected_charge_in_beta_scan')/'collected_charge_langauss_fit.html').relative_to(Romina.path_to_run_directory),
+						'run_name': subrun.run_name,
+					},
+					index = [0],
+				).set_index('run_name', drop=True)
+			)
+		path_to_subplots = pandas.concat(path_to_subplots)
+		
+		document_title = f'Langauss fits to measure collected charge in {bureaucrat.run_name}'
+		html_doc = dominate.document(title=document_title)
+		with html_doc:
+			dominate.tags.h1(document_title)
+			with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
+				for i,row in path_to_subplots.sort_index().iterrows():
+					dominate.tags.iframe(
+						src = str(
+							row['path']
+						), 
+						style = f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;'
+					)
+		with open(task_handler.path_to_directory_of_my_task/f'langauss_fits.html', 'w') as ofile:
+			print(html_doc, file=ofile)
 
 def script_core(bureaucrat:RunBureaucrat, force:bool, number_of_processes:int=1):
 	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):

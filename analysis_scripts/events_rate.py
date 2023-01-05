@@ -41,7 +41,10 @@ def fit_exponential_to_time_differences(time_differences:numpy.array, measuremen
 		'Offset (s)': popt[0],
 	}
 
-def events_rate(bureaucrat:RunBureaucrat, n_bootstraps:int=99):
+def events_rate(bureaucrat:RunBureaucrat, n_bootstraps:int=99, force:bool=False):
+	if force==False and bureaucrat.was_task_run_successfully('events_rate'):
+		return
+	
 	with bureaucrat.handle_task('events_rate') as employee:
 		bureaucrat.check_these_tasks_were_run_successfully(['beta_scan'])
 		data = load_whole_dataframe(bureaucrat.path_to_directory_of_task('beta_scan')/'measured_stuff.sqlite')
@@ -149,16 +152,16 @@ def events_rate_vs_bias_voltage(bureaucrat:RunBureaucrat, n_bootstraps:int=99, n
 	
 	with bureaucrat.handle_task('events_rate_vs_bias_voltage') as employee:
 		subruns = bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
-		if force == True:
-			if number_of_processes == 1:
-				for subrun in subruns:
-					events_rate(bureaucrat = subrun, n_bootstraps = n_bootstraps)
-			else:
-				with multiprocessing.Pool(number_of_processes) as p:
-					p.starmap(
-						events_rate,
-						[(bur,n_btstrps) for bur,n_btstrps in zip(subruns, [n_bootstraps]*len(subruns))]
-					)
+		
+		if number_of_processes == 1:
+			for subrun in subruns:
+				events_rate(bureaucrat = subrun, n_bootstraps = n_bootstraps, force=force)
+		else:
+			with multiprocessing.Pool(number_of_processes) as p:
+				p.starmap(
+					events_rate,
+					[(bur,n_btstrps,frc) for bur,n_btstrps,frc in zip(subruns, [n_bootstraps]*len(subruns), [force]*len(subruns))]
+				)
 		
 		rates = read_events_rate(bureaucrat)
 		

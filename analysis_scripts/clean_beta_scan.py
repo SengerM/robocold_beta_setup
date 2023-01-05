@@ -8,6 +8,25 @@ import plotly.express as px
 import numpy as np
 from plot_beta_scan import draw_histogram_and_langauss_fit
 import dominate # https://github.com/Knio/dominate
+import grafica.plotly_utils.utils
+from scipy.optimize import minimize
+
+def create_cuts_file_template(bureaucrat:RunBureaucrat):
+	"""Creates a file `cuts.csv` in the run directory with the template
+	that is most commonly used.
+	"""
+	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+		path_to_cuts_file = bureaucrat.path_to_run_directory/'cuts.csv'
+		if path_to_cuts_file.is_file():
+			raise RuntimeError(f'A file with the cuts already exists.')
+		with open(path_to_cuts_file, 'w') as ofile:
+			print('run_name,signal_name,variable,cut_type,cut_value', file=ofile)
+			for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+				print(f'{subrun.run_name},DUT,Amplitude (V),lower,NaN', file=ofile)
+	elif bureaucrat.was_task_run_successfully('beta_scan'):
+		raise NotImplementedError(f'Not yet implemented for `beta_scan`.')
+	else:
+		raise RuntimeError(f'Dont know how to create cuts file template for run {repr(bureaucrat.run_name)}.')
 
 def apply_cuts(data_df, cuts_df):
 	"""
@@ -257,13 +276,13 @@ def plots_of_clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, sca
 			with open(Ernestos_employee.path_to_directory_of_my_task/f'{plot_type} together.html', 'w') as ofile:
 				print(html_doc, file=ofile)
 
-def script_core(bureaucrat:RunBureaucrat):
+def script_core(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None):
 	John = bureaucrat
 	if John.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
-		clean_beta_scan_sweeping_bias_voltage(John)
-		plots_of_clean_beta_scan_sweeping_bias_voltage(John)
+		clean_beta_scan_sweeping_bias_voltage(John, path_to_cuts_file=path_to_cuts_file)
+		plots_of_clean_beta_scan_sweeping_bias_voltage(John, langauss_plots=True)
 	elif John.was_task_run_successfully('beta_scan'):
-		clean_beta_scan(John)
+		clean_beta_scan(John, path_to_cuts_file=path_to_cuts_file)
 		clean_beta_scan_plots(John)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(John.run_name)} located in {John.path_to_run_directory}.')
@@ -306,8 +325,87 @@ def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(burea
 	)
 	return df
 
+def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
+	"""Automatically finds the threshold value for cutting in the amplitude.
+	"""
+	bureaucrat.check_these_tasks_were_run_successfully('beta_scan')
+	with bureaucrat.handle_task('automatic_cut_amplitude') as employee:
+		data = load_whole_dataframe(bureaucrat.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
+		
+		data = data.query('signal_name=="DUT"')
+		
+		x = data['Amplitude (V)']
+		x = x.dropna()
+		x = x[(x>=x.quantile(.05)) & (x<=x.quantile(.95))]
+		threshold_cut = data.loc[x.sort_values().diff().idxmax(),'Amplitude (V)']
+		
+		cuts = pandas.DataFrame(
+			{
+				'signal_name': 'DUT',
+				'variable': 'Amplitude (V)',
+				'cut_type': 'lower',
+				'cut_value': threshold_cut,
+			},
+			index = [0],
+		)
+		cuts.to_csv(employee.path_to_directory_of_my_task/'cuts.csv', index=False)
+		
+		fig = px.ecdf(
+			data['Amplitude (V)'],
+			title = f'Automatic threshold cut in amplitude<br><sup>{bureaucrat.run_name}</sup>',
+		)
+		fig.add_vline(
+			x = threshold_cut,
+			annotation_text = 'Threshold',
+			annotation_textangle = 90,
+		)
+		fig.write_html(
+			employee.path_to_directory_of_my_task/'cut_in_amplitude.html',
+			include_plotlyjs = 'cdn',
+		)
+
+def automatic_cuts(bureaucrat:RunBureaucrat):
+	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	with bureaucrat.handle_task('automatic_cuts') as employee:
+		cuts = []
+		path_to_subplots = []
+		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			automatic_cut_amplitude(subrun)
+			df = pandas.read_csv(subrun.path_to_directory_of_task('automatic_cut_amplitude')/'cuts.csv')
+			df['run_name'] = subrun.run_name
+			cuts.append(df)
+			path_to_subplots.append(
+				pandas.DataFrame(
+					{
+						'path': Path('..')/(subrun.path_to_directory_of_task('automatic_cut_amplitude')/'cut_in_amplitude.html').relative_to(bureaucrat.path_to_run_directory),
+						'run_name': subrun.run_name,
+					},
+					index = [0],
+				).set_index('run_name', drop=True)
+			)
+		cuts = pandas.concat(cuts)
+		cuts.to_csv(employee.path_to_directory_of_my_task/'cuts.csv', index=False)
+		path_to_subplots = pandas.concat(path_to_subplots)
+		
+		document_title = f'Automatic amplitude cuts plots for {bureaucrat.run_name}'
+		html_doc = dominate.document(title=document_title)
+		with html_doc:
+			dominate.tags.h1(document_title)
+			with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
+				for i,row in path_to_subplots.sort_index().iterrows():
+					dominate.tags.iframe(
+						src = str(
+							row['path']
+						), 
+						style = f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;'
+					)
+		with open(employee.path_to_directory_of_my_task/f'automatic_cuts_plots.html', 'w') as ofile:
+			print(html_doc, file=ofile)
+
 if __name__ == '__main__':
 	import argparse
+	
+	grafica.plotly_utils.utils.set_my_template_as_default()
 
 	parser = argparse.ArgumentParser(description='Cleans a beta scan according to some criterion.')
 	parser.add_argument('--dir',
