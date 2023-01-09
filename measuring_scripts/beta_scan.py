@@ -215,7 +215,7 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 							parsed_from_waveforms_dumper.append(parsed_from_waveform_df)
 						
 						# Plot some of the signals ---
-						if numpy.random.rand()<20/n_triggers:
+						if numpy.random.rand()<20/n_triggers or n_trigger < 2:
 							for signal_name in the_setup.get_oscilloscope_configuration_df().index:
 								fig = plot_waveform(this_trigger_waveforms_dict[signal_name])
 								fig.update_layout(
