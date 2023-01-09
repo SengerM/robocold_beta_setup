@@ -355,7 +355,7 @@ class TheRobocoldBetaSetup:
 			A dictionary of the form `{'Time (s)': np.array, 'Amplitude (V)': np.array}`.
 		"""
 		with self._oscilloscope_Lock:
-			return self._oscilloscope.get_waveform(channel=oscilloscope_channel_number)
+			return self._oscilloscope.get_waveform(n_channel=oscilloscope_channel_number)['waveforms'][0]
 	
 	def get_triggers_times(self):
 		"""Gets a list of trigger times measured in seconds since the
