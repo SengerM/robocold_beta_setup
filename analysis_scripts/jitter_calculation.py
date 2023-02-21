@@ -227,20 +227,23 @@ def plot_cfd(jitter_vs_kCFDs:pandas.Series, jitter_statistics:pandas.DataFrame):
 	)
 	return fig
 
-def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best', force:bool=False):
+def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds, force:bool=False):
 	"""Calculates the jitter from a beta scan between two devices.
 	
 	Arguments
 	---------
 	bureaucrat: RunBureaucrat
 		A bureaucrat to handle this run.
-	CFD_thresholds: str or dict, default `'best'`
-		If `'best'`, then the CFD thresholds are chosen such that the
-		jitter is minimized. If a dictionary, it must be of the form:
+	CFD_thresholds: dict
+		It must be of the form:
 		`{signal_name_1: float, signal_name_2: float}` where each `signal_name`
 		is a string with the name of the signal and each `float` is a 
 		number between 0 and 100 specifying the CFD threshold height in 
-		percentage, e.g. `{'DUT': 20, 'reference_trigger': 50}`.
+		percentage, e.g. `{'DUT': 20, 'reference_trigger': 50}`. Alternatively
+		it is possible to specify `'best'` for one or the two signals
+		names in order to not fix the CFD threshold for such signal and
+		just let the algorithm to pick the best one to minimize the jitter,
+		for example `{'DUT': 'best', 'reference_trigger': 50}`.
 	force: bool, default `True`
 		If `True` the calculation is done, no matter if it was done before
 		or not. If `False` the calculation will be done only if there is
@@ -253,6 +256,8 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 	
 	if not isinstance(CFD_thresholds, dict):
 		raise TypeError(f'`CFD_thresholds` must be a dictionary, received object of type {type(CFD_thresholds)}.')
+	if len(CFD_thresholds) != 2:
+		raise ValueError(f'`CFD_thresholds` must be a dictionary with 2 elements, received insted one with {len(CFD_thresholds)}. ')
 	for key,item in CFD_thresholds.items():
 			if item != 'best' and not (isinstance(item, (int,float)) and 0 <= item <= 100):
 				raise ValueError(f'Items in `CFD_thresholds` must be either "best" or a number between 0 and 100, received {CFD_thresholds} where {repr(item)} is invalid.')
@@ -276,12 +281,7 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 			)
 			data_df = tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(Norberto, data_df).query('is_background==False').drop(columns='is_background')
 		
-		# I always expect that there are only two measured signals from the beta setup, let's check it:
-		set_of_measured_signals = set(data_df.index.get_level_values('signal_name'))
-		if len(set_of_measured_signals) == 2:
-			signal_names = set_of_measured_signals
-		else:
-			raise RuntimeError(f'A time resolution calculation requires two signals (DUT and reference, or two DUTs), but this beta scan has the following signal names `{set_of_measured_signals}`. Dont know how to handle this, sorry dude...')
+		data_df = data_df.query(f'signal_name in {list(CFD_thresholds.keys())}') # Keep only the specified signals names, drop others if present.
 		
 		jitter_results = []
 		jitter_vs_kCFDs = []
@@ -324,7 +324,7 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 		jitters = pandas.concat(jitters)
 		jitters.reset_index(sorted(set(jitters.index.names)-{'k_bootstrap'}), drop=False, inplace=True)
 		
-		jitter_vs_kCFDs_statistics = jitter_vs_kCFDs.groupby(['k_DUT (%)','k_MCP-PMT (%)']).agg([np.mean,np.std])
+		jitter_vs_kCFDs_statistics = jitter_vs_kCFDs.groupby([f'k_{signal_name} (%)' for signal_name in sorted(CFD_thresholds)]).agg([np.mean,np.std])
 		jitters_statistics = jitters.agg([np.mean,np.std])
 
 		jitter_vs_kCFDs_statistics.rename(columns={'mean':'', 'std':'error'},inplace=True)
