@@ -266,8 +266,8 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds='best'
 		data_df = load_whole_dataframe(Norberto.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 		
 		set_of_signals_in_this_measurement = set(data_df.index.get_level_values('signal_name'))
-		if set(CFD_thresholds.keys()) != set_of_signals_in_this_measurement:
-			raise ValueError(f'`CFD_thresholds` must be a dictionary with the signals names as keys. For run {repr(Norberto.run_name)} located in {repr(str(Norberto.path_to_run_directory))} such signals are {set_of_signals_in_this_measurement} while the keys of `CFD_thresholds` are {set(CFD_thresholds.keys())}.')
+		if not set(CFD_thresholds.keys()).issubset(set_of_signals_in_this_measurement):
+			raise ValueError(f'`CFD_thresholds` must be a dictionary with the signals names as keys. For run {repr(Norberto.run_name)} located in {repr(str(Norberto.path_to_run_directory))} such signals are {repr(set_of_signals_in_this_measurement)} while the keys of `CFD_thresholds` are {set(CFD_thresholds.keys())}.')
 		
 		if Norberto.check_these_tasks_were_run_successfully('clean_beta_scan', raise_error=False): # If there was a cleaning done, let's take it into account...
 			shutil.copyfile( # Put a copy of the cuts in the output directory so there is a record of what was done.
