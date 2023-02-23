@@ -190,7 +190,7 @@ def read_collected_charge(bureaucrat:RunBureaucrat):
 	else:
 		raise RuntimeError(f'Dont know how to read the collected charge in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}')
 
-def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, transimpedance:pandas.DataFrame=None, force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
+def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, DUT_signal_name:str, transimpedance:pandas.DataFrame=None, force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
 	Romina = bureaucrat
 	
 	Romina.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
@@ -213,9 +213,9 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, transimpedance:pa
 		
 		collected_charge = read_collected_charge(bureaucrat)
 		
-		if "DUT" not in collected_charge.index.get_level_values('signal_name'):
-			raise RuntimeError(f'Cannot find "DUT" signal within the calculated charge data...')
-		collected_charge = collected_charge.query('signal_name=="DUT"')
+		if DUT_signal_name not in collected_charge.index.get_level_values('signal_name'):
+			raise RuntimeError(f'Cannot find {repr(DUT_signal_name)} signal within the calculated charge data...')
+		collected_charge = collected_charge.query(f'signal_name=="{DUT_signal_name}"')
 		
 		summary = read_summarized_data(bureaucrat)
 		summary.columns = [f'{col[0]} {col[1]}' for col in summary.columns]
@@ -298,6 +298,7 @@ def script_core(bureaucrat:RunBureaucrat, force:bool, number_of_processes:int=1)
 	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		collected_charge_vs_bias_voltage(
 			bureaucrat = bureaucrat,
+			DUT_signal_name = 'DUT_CH1',
 			force_calculation_on_submeasurements = force,
 			transimpedance = TRANSIMPEDANCE,
 			number_of_processes = number_of_processes,

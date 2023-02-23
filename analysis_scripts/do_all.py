@@ -26,8 +26,16 @@ def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, path_to_cuts_file:Path
 			force = force,
 			number_of_processes = number_of_processes,
 		)
+	
+	_ = set(CFD_thresholds)
+	_.remove('MCP-PMT')
+	if len(_) != 1:
+		raise RuntimeError('`CFD_thresholds` does not have two elements. It must have two, e.g. `{"DUT": 10, "MCP-PMT": 20}`. ')
+	DUT_signal_name = list(_)[0]
+	
 	time_resolution(
 		bureaucrat = bureaucrat,
+		DUT_signal_name = DUT_signal_name,
 		reference_signal_name = 'MCP-PMT',
 		reference_signal_time_resolution = 17.32e-12, # My best characterization of the Photonis PMT.
 		reference_signal_time_resolution_error = 2.16e-12, # My best characterization of the Photonis PMT.
@@ -86,7 +94,7 @@ if __name__ == '__main__':
 		path_to_cuts_file = path_to_cuts_file,
 		skip_charge = False,
 		skip_jitter = False,
-		CFD_thresholds = {'DUT': 'best', 'MCP-PMT': 'best'},
+		CFD_thresholds = {'DUT_CH1': 'best', 'MCP-PMT': 'best'},
 		force = args.force,
 		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)

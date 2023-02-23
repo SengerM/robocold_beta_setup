@@ -8,7 +8,7 @@ from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github
 from summarize_parameters import read_summarized_data
 from collected_charge import read_collected_charge
 
-def time_resolution_DUT_and_reference(bureaucrat:RunBureaucrat, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
+def time_resolution_DUT_and_reference(bureaucrat:RunBureaucrat, DUT_signal_name:str, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
 	bureaucrat.check_these_tasks_were_run_successfully(['beta_scan','jitter_calculation_beta_scan'])
 	
 	with bureaucrat.handle_task('time_resolution_DUT_and_reference') as employee:
@@ -21,10 +21,8 @@ def time_resolution_DUT_and_reference(bureaucrat:RunBureaucrat, reference_signal
 		if reference_signal_name not in signals_names:
 			raise RuntimeError(f'Cannot find reference signal name within the measured signals...')
 		
-		DUT_signal_name = signals_names - set([reference_signal_name])
-		if len(DUT_signal_name) != 1:
-			raise RuntimeError(f'Cannot find DUT signal name, check what is going on.')
-		DUT_signal_name = list(DUT_signal_name)[0]
+		if DUT_signal_name not in signals_names:
+			raise RuntimeError(f'Cannot find `DUT_signal_name` {repr(DUT_signal_name)} within the signals available in run {repr(bureaucrat.run_name)} located in {bureaucrat.path_to_run_directory}. The signals measured in this run are {signals_names}. ')
 		
 		jitter = ufloat(jitter.loc[0,'Jitter (s)'], jitter.loc[0,'Jitter (s) error'])
 		reference_contribution = ufloat(reference_signal_time_resolution,reference_signal_time_resolution_error)
@@ -69,12 +67,13 @@ def read_time_resolution(bureaucrat:RunBureaucrat):
 	else:
 		raise RuntimeError(f'Dont know how to read the time resolution in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}')
 
-def time_resolution_DUT_and_reference_vs_bias_voltage(bureaucrat:RunBureaucrat, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float, force:bool=False):
+def time_resolution_DUT_and_reference_vs_bias_voltage(bureaucrat:RunBureaucrat, DUT_signal_name:str, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float, force:bool=False):
 	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	with bureaucrat.handle_task('time_resolution_DUT_and_reference_vs_bias_voltage') as employee:
 		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
 			time_resolution_DUT_and_reference(
 				bureaucrat = subrun,
+				DUT_signal_name = DUT_signal_name,
 				reference_signal_name = reference_signal_name,
 				reference_signal_time_resolution = reference_signal_time_resolution,
 				reference_signal_time_resolution_error = reference_signal_time_resolution_error,
@@ -82,9 +81,9 @@ def time_resolution_DUT_and_reference_vs_bias_voltage(bureaucrat:RunBureaucrat, 
 		
 		time_resolution = read_time_resolution(bureaucrat)
 		
-		if "DUT" not in time_resolution.index.get_level_values('signal_name'):
-			raise RuntimeError(f'Cannot find "DUT" signal within the calculated time resolution data...')
-		time_resolution = time_resolution.query('signal_name=="DUT"')
+		if DUT_signal_name not in time_resolution.index.get_level_values('signal_name'):
+			raise RuntimeError(f'Cannot find {repr(DUT_signal_name)} signal within the calculated time resolution data...')
+		time_resolution = time_resolution.query(f'signal_name=="{DUT_signal_name}"')
 		
 		summary = read_summarized_data(bureaucrat)
 		summary.columns = [f'{col[0]} {col[1]}' for col in summary.columns]
@@ -109,10 +108,11 @@ def time_resolution_DUT_and_reference_vs_bias_voltage(bureaucrat:RunBureaucrat, 
 			include_plotlyjs = 'cdn',
 		)
 
-def script_core(bureaucrat:RunBureaucrat, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
+def script_core(bureaucrat:RunBureaucrat, DUT_signal_name:str, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
 	if bureaucrat.was_task_run_successfully('beta_scan'):
 		time_resolution_DUT_and_reference(
 			bureaucrat = bureaucrat,
+			DUT_signal_name = DUT_signal_name,
 			reference_signal_name = reference_signal_name,
 			reference_signal_time_resolution = reference_signal_time_resolution,
 			reference_signal_time_resolution_error = reference_signal_time_resolution_error,
@@ -120,6 +120,7 @@ def script_core(bureaucrat:RunBureaucrat, reference_signal_name:str, reference_s
 	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		time_resolution_DUT_and_reference_vs_bias_voltage(
 			bureaucrat = bureaucrat,
+			DUT_signal_name = DUT_signal_name,
 			reference_signal_name = reference_signal_name,
 			reference_signal_time_resolution = reference_signal_time_resolution,
 			reference_signal_time_resolution_error = reference_signal_time_resolution_error,
@@ -145,6 +146,7 @@ if __name__ == '__main__':
 	
 	script_core(
 		bureaucrat = RunBureaucrat(Path(args.directory)),
+		DUT_signal_name = 'DUT',
 		reference_signal_name = 'MCP-PMT',
 		reference_signal_time_resolution = 17.32e-12, # My best characterization of the Photonis PMT.
 		reference_signal_time_resolution_error = 2.16e-12, # My best characterization of the Photonis PMT.

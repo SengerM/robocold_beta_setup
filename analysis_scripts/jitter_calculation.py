@@ -380,7 +380,7 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds, force
 			include_plotlyjs = 'cdn',
 		)
 
-def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_thresholds='best', force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
+def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_thresholds, force_calculation_on_submeasurements:bool=False, number_of_processes:int=1):
 	Norberto = bureaucrat
 	
 	Norberto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
@@ -557,7 +557,7 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	script_core(
 		RunBureaucrat(Path(args.directory)),
-		CFD_thresholds = {'DUT': 50, 'MCP-PMT': 20},
+		CFD_thresholds = {'DUT_CH4': 'best', 'MCP-PMT': 'best'},
 		force = args.force,
 		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)
