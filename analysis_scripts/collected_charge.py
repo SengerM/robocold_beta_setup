@@ -294,11 +294,11 @@ def collected_charge_vs_bias_voltage(bureaucrat:RunBureaucrat, DUT_signal_name:s
 		with open(task_handler.path_to_directory_of_my_task/f'langauss_fits.html', 'w') as ofile:
 			print(html_doc, file=ofile)
 
-def script_core(bureaucrat:RunBureaucrat, force:bool, number_of_processes:int=1):
+def script_core(bureaucrat:RunBureaucrat, DUT_signal_name:str, force:bool, number_of_processes:int=1):
 	if bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		collected_charge_vs_bias_voltage(
 			bureaucrat = bureaucrat,
-			DUT_signal_name = 'DUT_CH1',
+			DUT_signal_name = DUT_signal_name,
 			force_calculation_on_submeasurements = force,
 			transimpedance = TRANSIMPEDANCE,
 			number_of_processes = number_of_processes,

@@ -13,12 +13,18 @@ import multiprocessing
 import grafica.plotly_utils.utils
 
 def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, path_to_cuts_file:Path=None, skip_charge:bool=False, skip_jitter:bool=False, force:bool=True, number_of_processes:int=1):
+	_ = set(CFD_thresholds)
+	_.remove('MCP-PMT')
+	if len(_) != 1:
+		raise RuntimeError('`CFD_thresholds` does not have two elements. It must have two, e.g. `{"DUT": 10, "MCP-PMT": 20}`. ')
+	DUT_signal_name = list(_)[0]
+	
 	clean_beta_scan(bureaucrat, path_to_cuts_file=path_to_cuts_file)
 	summarize_parameters(bureaucrat, force=force)
 	IV_curve_from_beta_scan_data(bureaucrat)
 	events_rate_vs_bias_voltage(bureaucrat, force=force, number_of_processes=number_of_processes)
 	if not skip_charge:
-		collected_charge(bureaucrat, force=force, number_of_processes=number_of_processes)
+		collected_charge(bureaucrat, DUT_signal_name=DUT_signal_name, force=force, number_of_processes=number_of_processes)
 	if not skip_jitter:
 		jitter_calculation(
 			bureaucrat,
@@ -26,12 +32,6 @@ def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, path_to_cuts_file:Path
 			force = force,
 			number_of_processes = number_of_processes,
 		)
-	
-	_ = set(CFD_thresholds)
-	_.remove('MCP-PMT')
-	if len(_) != 1:
-		raise RuntimeError('`CFD_thresholds` does not have two elements. It must have two, e.g. `{"DUT": 10, "MCP-PMT": 20}`. ')
-	DUT_signal_name = list(_)[0]
 	
 	time_resolution(
 		bureaucrat = bureaucrat,
@@ -48,6 +48,8 @@ def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, path_to_cuts_file:Path
 
 if __name__ == '__main__':
 	import argparse
+	
+	DUT_SIGNAL_NAME = 'DUT_CH1'
 	
 	grafica.plotly_utils.utils.set_my_template_as_default()
 
@@ -87,6 +89,7 @@ if __name__ == '__main__':
 			exit()
 	else:
 		automatic_cuts(bureaucrat)
+		automatic_cuts(bureaucrat, DUT_signal_name=DUT_SIGNAL_NAME)
 		path_to_cuts_file = bureaucrat.path_to_directory_of_task('automatic_cuts')/'cuts.csv'
 	
 	do_all(
@@ -94,7 +97,7 @@ if __name__ == '__main__':
 		path_to_cuts_file = path_to_cuts_file,
 		skip_charge = False,
 		skip_jitter = False,
-		CFD_thresholds = {'DUT_CH1': 'best', 'MCP-PMT': 'best'},
+		CFD_thresholds = {DUT_SIGNAL_NAME: 'best', 'MCP-PMT': 'best'},
 		force = args.force,
 		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)

@@ -325,14 +325,22 @@ def tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(burea
 	)
 	return df
 
-def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
+def automatic_cut_amplitude(bureaucrat:RunBureaucrat, DUT_signal_name:str):
 	"""Automatically finds the threshold value for cutting in the amplitude.
+	
+	Arguments
+	---------
+	bureaucrat: RunBureaucrat
+		A bureaucrat object handling the run in which to apply the automatic
+		cuts on the amplitude.
+	DUT_signal_name: str
+		Name of the signal that is the DUT.
 	"""
 	bureaucrat.check_these_tasks_were_run_successfully('beta_scan')
 	with bureaucrat.handle_task('automatic_cut_amplitude') as employee:
 		data = load_whole_dataframe(bureaucrat.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 		
-		data = data.query('signal_name=="DUT"')
+		data = data.query(f'signal_name=="{DUT_signal_name}"')
 		
 		x = data['Amplitude (V)']
 		x = x.dropna()
@@ -341,7 +349,7 @@ def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
 		
 		cuts = pandas.DataFrame(
 			{
-				'signal_name': 'DUT',
+				'signal_name': DUT_signal_name,
 				'variable': 'Amplitude (V)',
 				'cut_type': 'lower',
 				'cut_value': threshold_cut,
@@ -364,13 +372,13 @@ def automatic_cut_amplitude(bureaucrat:RunBureaucrat):
 			include_plotlyjs = 'cdn',
 		)
 
-def automatic_cuts(bureaucrat:RunBureaucrat):
+def automatic_cuts(bureaucrat:RunBureaucrat, DUT_signal_name:str):
 	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	with bureaucrat.handle_task('automatic_cuts') as employee:
 		cuts = []
 		path_to_subplots = []
 		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
-			automatic_cut_amplitude(subrun)
+			automatic_cut_amplitude(subrun, DUT_signal_name=DUT_signal_name)
 			df = pandas.read_csv(subrun.path_to_directory_of_task('automatic_cut_amplitude')/'cuts.csv')
 			df['run_name'] = subrun.run_name
 			cuts.append(df)
