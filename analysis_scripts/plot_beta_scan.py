@@ -120,7 +120,7 @@ def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, 
 			align = 'right',
 		)
 
-def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False):
+def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False, scatter_matrix_plot:bool=True):
 	John = bureaucrat
 	
 	John.check_these_tasks_were_run_successfully('beta_scan')
@@ -179,32 +179,33 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 				str(path_to_save_plots/Path(f'{col} ecdf.html')),
 				include_plotlyjs = 'cdn',
 			)
-			
-		columns_for_scatter_matrix_plot = set(df.columns) 
-		columns_for_scatter_matrix_plot -= {'n_trigger','signal_name'} 
-		columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
-		columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
-		fig = px.scatter_matrix(
-			df,
-			dimensions = sorted(columns_for_scatter_matrix_plot),
-			title = f'Scatter matrix plot<br><sup>Run: {John.run_name}</sup>',
-			color = 'signal_name',
-			hover_data = ['n_trigger'],
-		)
-		fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
-		for k in range(len(fig.data)):
-			fig.data[k].update(
-				selected = dict(
-					marker = dict(
-						opacity = 1,
-						color = 'black',
-					)
-				),
+		
+		if scatter_matrix_plot:
+			columns_for_scatter_matrix_plot = set(df.columns) 
+			columns_for_scatter_matrix_plot -= {'n_trigger','signal_name','t_50 - t_50_MCP-PMT (s)'} 
+			columns_for_scatter_matrix_plot -= {f't_{i} (s)' for i in [10,20,30,40,60,70,80,90]}
+			columns_for_scatter_matrix_plot -= {f'Time over {i}% (s)' for i in [10,30,40,50,60,70,80,90]}
+			fig = px.scatter_matrix(
+				df,
+				dimensions = sorted(columns_for_scatter_matrix_plot),
+				title = f'Scatter matrix plot<br><sup>Run: {John.run_name}</sup>',
+				color = 'signal_name',
+				hover_data = ['n_trigger'],
 			)
-		fig.write_html(
-			str(path_to_save_plots/Path('scatter matrix plot.html')),
-			include_plotlyjs = 'cdn',
-		)
+			fig.update_traces(diagonal_visible=False, showupperhalf=False, marker = {'size': 3})
+			for k in range(len(fig.data)):
+				fig.data[k].update(
+					selected = dict(
+						marker = dict(
+							opacity = 1,
+							color = 'black',
+						)
+					),
+				)
+			fig.write_html(
+				str(path_to_save_plots/Path('scatter matrix plot.html')),
+				include_plotlyjs = 'cdn',
+			)
 		
 		path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms')
 		path_to_save_plots.mkdir(exist_ok=True)
