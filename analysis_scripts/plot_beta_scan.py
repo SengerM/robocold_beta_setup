@@ -120,7 +120,7 @@ def draw_histogram_and_langauss_fit(fig, parsed_from_waveforms_df, signal_name, 
 			align = 'right',
 		)
 
-def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False, scatter_matrix_plot:bool=True):
+def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_when:bool=False, all_distributions:bool=False, scatter_matrix_plot:bool=False):
 	John = bureaucrat
 	
 	John.check_these_tasks_were_run_successfully('beta_scan')
@@ -156,7 +156,7 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 			if col in {'signal_name','n_trigger'}:
 				continue
 			if not all_distributions:
-				if col not in {'Amplitude (V)','Collected charge (V s)','SNR','Noise (V)','t_50 (s)'}:
+				if col not in {'Amplitude (V)','Collected charge (V s)','SNR','Noise (V)','t_50 (s)','Rise time (s)'}:
 					continue
 			fig = px.histogram(
 				df,
