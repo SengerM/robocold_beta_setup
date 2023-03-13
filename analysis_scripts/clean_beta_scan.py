@@ -126,7 +126,7 @@ def clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, path_to_cuts
 		this_run_cuts_df.to_csv(Quique.path_to_temporary_directory/'cuts.cvs',index=False)
 		clean_beta_scan(Quique, Quique.path_to_temporary_directory/'cuts.cvs')
 
-def clean_beta_scan_plots(bureaucrat:RunBureaucrat, scatter_plot:bool=True, langauss_plots:bool=True, distributions:bool=False):
+def clean_beta_scan_plots(bureaucrat:RunBureaucrat, scatter_plot:bool=False, langauss_plots:bool=True, distributions:bool=False):
 	COLOR_DISCRETE_MAP = {
 		True: '#ff5c5c',
 		False: '#27c200',
@@ -240,7 +240,7 @@ def clean_beta_scan_plots(bureaucrat:RunBureaucrat, scatter_plot:bool=True, lang
 					include_plotlyjs = 'cdn',
 				)
 
-def plots_of_clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, scatter_plot:bool=True, langauss_plots:bool=True, distributions:bool=False):
+def plots_of_clean_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, scatter_plot:bool=False, langauss_plots:bool=True, distributions:bool=False):
 	Ernesto = bureaucrat
 	Ernesto.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
