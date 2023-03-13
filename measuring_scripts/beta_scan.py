@@ -11,9 +11,9 @@ from huge_dataframe.SQLiteDataFrame import SQLiteDataFrameDumper, load_whole_dat
 import threading
 import warnings
 from signals.PeakSignal import PeakSignal, draw_in_plotly # https://github.com/SengerM/signals
-from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
-import my_telegram_bots
+from progressreporting.TelegramProgressReporter import SafeTelegramReporter4Loops # https://github.com/SengerM/progressreporting
 import numpy
+from contextlib import nullcontext
 
 def parse_waveform(signal:PeakSignal):
 	parsed = {
@@ -96,7 +96,7 @@ def plot_waveform(signal):
 			pass
 	return fig
 
-def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False):
+def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers:int, bias_voltage:float, software_trigger=None, silent=False, reporter:SafeTelegramReporter4Loops=None):
 	"""Perform a beta scan.
 	
 	Parameters
@@ -125,6 +125,8 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 		The value for the voltage.
 	silent: bool, default False
 		If `True`, no progress messages are printed.
+	reporter: SafeTelegramReporter4Loops, optional
+		An instance of `SafeTelegramReporter4Loops` to report the progress.
 	
 	Returns
 	-------
@@ -133,21 +135,16 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 	"""
 	
 	John = bureaucrat
-	John.create_run()
+	John.create_run(if_exists='skip')
 	
 	the_setup = connect_me_with_the_setup()
-	
-	reporter = TelegramReporter(
-		telegram_token = my_telegram_bots.robobot.token,
-		telegram_chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
-	)
 	
 	if not silent:
 		print('Waiting for acquiring control of the hardware...')
 	with the_setup.hold_signal_acquisition(who=name_to_access_to_the_setup), the_setup.hold_control_of_bias_for_slot_number(slot_number, who=name_to_access_to_the_setup), the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
 		if not silent:
 			print('Control of hardware acquired.')
-		the_setup.set_trigger_for_beta_scans(who=name_to_access_to_the_setup)
+		# ~ the_setup.set_trigger_for_beta_scans(who=name_to_access_to_the_setup)
 		with John.handle_task('beta_scan') as beta_scan_task_bureaucrat:
 			with open(beta_scan_task_bureaucrat.path_to_directory_of_my_task/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
@@ -157,16 +154,10 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 				SQLiteDataFrameDumper(beta_scan_task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms.sqlite'), dump_after_n_appends=1e3, dump_after_seconds=66) as parsed_from_waveforms_dumper \
 			:
 				if not silent:
-					print(f'Moving beta source to slot number {slot_number}...')
-				the_setup.move_to_slot(slot_number, who=name_to_access_to_the_setup)
-				if not silent:
-					print(f'Connecting oscilloscope to slot number {slot_number}...')
-				the_setup.connect_slot_to_oscilloscope(slot_number, who=name_to_access_to_the_setup)
-				if not silent:
 					print(f'Setting bias voltage {bias_voltage} V to slot number {slot_number}...')
 				the_setup.set_bias_voltage(slot_number=slot_number, volts=bias_voltage, who=name_to_access_to_the_setup)
 				
-				with reporter.report_for_loop(n_triggers, John.run_name) as reporter:
+				with reporter.report_loop(n_triggers, John.run_name) if reporter is not None else nullcontext() as reporter:
 					n_waveform = -1
 					for n_trigger in range(n_triggers):
 						# Acquire ---
@@ -232,7 +223,7 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 	if not silent:
 		print('Beta scan finished.')
 
-def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers_per_voltage:list, bias_voltages:list, software_triggers:list=None, silent=False):
+def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_number:int, n_triggers_per_voltage:list, bias_voltages:list, software_triggers:list=None, silent=False, reporter:SafeTelegramReporter4Loops=None):
 	"""Perform multiple beta scans at different bias voltages each.
 	
 	Parameters
@@ -252,6 +243,8 @@ def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_
 		The bias voltages at which to measure.
 	silent: bool, default False
 		If `True`, no progress messages are printed.
+	reporter: SafeTelegramReporter4Loops, optional
+		An instance of `SafeTelegramReporter4Loops` to report the progress.
 	
 	Returns
 	-------
@@ -259,14 +252,9 @@ def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_
 		A path to the directory where the measurement's data was stored.
 	"""
 	John = bureaucrat
-	John.create_run()
+	John.create_run(if_exists='skip')
 	
 	the_setup = connect_me_with_the_setup()
-	
-	reporter = TelegramReporter(
-		telegram_token = my_telegram_bots.robobot.token,
-		telegram_chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
-	)
 	
 	if software_triggers is not None and len(bias_voltages) != len(software_triggers):
 		raise ValueError(f'The length of `software_triggers` must be the same as the length of `bias_voltages` as one trigger is for each bias voltage.')
@@ -280,7 +268,7 @@ def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_
 			with open(beta_scan_sweeping_bias_voltage_task_bureaucrat.path_to_directory_of_my_task/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
 			
-			with reporter.report_for_loop(len(bias_voltages), John.run_name) as reporter:
+			with reporter.report_loop(len(bias_voltages), John.run_name) if reporter is not None else nullcontext() as reporter:
 				if software_triggers is None:
 					software_triggers = [lambda x: True for v in bias_voltages]
 				for bias_voltage,software_trigger,n_triggers in zip(bias_voltages,software_triggers,n_triggers_per_voltage):
@@ -292,5 +280,6 @@ def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_
 						bias_voltage = bias_voltage,
 						software_trigger = software_trigger,
 						silent = silent,
+						reporter = reporter.create_subloop_reporter()
 					)
 					reporter.update(1)
