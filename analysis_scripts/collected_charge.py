@@ -16,30 +16,12 @@ sys.path.insert(1, '/home/sengerm/scripts_and_codes/repos/robocold_beta_setup/an
 from summarize_parameters import read_summarized_data
 from lmfit import Model, Parameter, report_fit
 from uncertainties import ufloat
-from utils import my_std, save_dataframe, kMAD, get_function_arguments_names, hex_to_rgba
+from utils import my_std, save_dataframe, kMAD, get_function_arguments_names, hex_to_rgba, resample_by_n_trigger, starmap_checking_arguments_names
 
 def signal_probability_density_model(x, landau_x_mpv, landau_xi, landau_gauss_sigma):
 	return langauss.pdf(x, landau_x_mpv, landau_xi, landau_gauss_sigma)
 
-def resample_by_n_trigger(df):
-	"""Produce a new sample of `df` using the value of `n_trigger`
-	to group rows. Returns a new data frame of the same size."""
-	was_series = False
-	if isinstance(df, pandas.Series):
-		df = df.to_frame()
-		was_series = True
-	resampled_df = df.reset_index(drop=False).pivot(
-		index = 'n_trigger',
-		columns = 'signal_name',
-		values = list(set(df.columns)),
-	)
-	resampled_df = resampled_df.sample(frac=1, replace=True)
-	resampled_df = resampled_df.stack()
-	if was_series:
-		resampled_df = resampled_df[resampled_df.columns[0]]
-	return resampled_df
-
-def Landau_fit_to_variable(bureaucrat:RunBureaucrat, time_from_trigger_background:dict, time_from_trigger_signal:dict, signal_name_trigger:str, n_bootstraps:int, collected_charge_variable_name:str, force:bool=False):
+def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_background:dict, time_from_trigger_signal:dict, signal_name_trigger:str, n_bootstraps:int, collected_charge_variable_name:str, force:bool=False):
 	"""Fit a Landau (Langauss) to a variable and extract the MPV.
 	
 	Arguments
@@ -86,7 +68,7 @@ def Landau_fit_to_variable(bureaucrat:RunBureaucrat, time_from_trigger_backgroun
 	"""
 	bureaucrat.check_these_tasks_were_run_successfully('beta_scan')
 	
-	TASK_NAME = f'Landau_fit_to_{collected_charge_variable_name.replace(" ","_")}'
+	TASK_NAME = f'fit_Landau_and_extract_MPV_{collected_charge_variable_name.replace(" ","_")}'
 	if force == False and bureaucrat.was_task_run_successfully(TASK_NAME): # If this was already done, don't do it again...
 		return
 	
@@ -143,8 +125,6 @@ def Landau_fit_to_variable(bureaucrat:RunBureaucrat, time_from_trigger_backgroun
 					raise RuntimeError(f'No signal events were found for `time_from_trigger_signal[signal_name]` = {repr(time_from_trigger_signal[signal_name])}. ')
 				if len(samples_background)==0:
 					raise RuntimeError(f'No background events were found for `time_from_trigger_background[signal_name]` = {repr(time_from_trigger_background[signal_name])}. ')
-				
-				print(f'{bureaucrat.run_name}, {variable}, {n_bootstrap}, {signal_name}')
 				
 				background_probability_density_model = gaussian_kde(samples_background)
 				
@@ -231,7 +211,7 @@ def Landau_fit_to_variable(bureaucrat:RunBureaucrat, time_from_trigger_backgroun
 				_['kind_of_data'] = kind_of_data
 				params_to_save.append(_)
 				
-				if n_bootstrap == 0: # Means with real data.
+				if n_bootstrap == 0 and 'result' in locals(): # Means with real data.
 					hist_max_for_the_plot_that_does_not_handle_it_automatically_yet = max(hist_max_for_the_plot_that_does_not_handle_it_automatically_yet,hist.max())
 					fig.add_trace(
 						scatter_histogram(
@@ -273,27 +253,30 @@ def Landau_fit_to_variable(bureaucrat:RunBureaucrat, time_from_trigger_backgroun
 						)
 					)
 				
-			if n_bootstrap == 0: # Means with real data.	
-				fig_background.update_layout(
-					title = f'{scaled_variable_name.replace(" SCALED","")} background model<br><sup>{bureaucrat.run_name}</sup>',
-					xaxis_title = scaled_variable_name.replace(" SCALED",""),
-					yaxis_title = 'Count',
-				)
-				fig.update_layout(
-					title = f'{scaled_variable_name.replace(" SCALED","")} fit<br><sup>{bureaucrat.run_name}</sup>',
-					xaxis_title = scaled_variable_name.replace(" SCALED",""),
-					yaxis_title = 'Count',
-				)
-				for _ in [fig,fig_background]:
-					_.update_yaxes(type='log', range=[numpy.log10(.5),numpy.log10(hist_max_for_the_plot_that_does_not_handle_it_automatically_yet*1.3)])
-				fig_background.write_html(
-					employee.path_to_directory_of_my_task/f'{scaled_variable_name} background model.html',
-					include_plotlyjs = 'cdn',
-				)
-				fig.write_html(
-					employee.path_to_directory_of_my_task/f'{scaled_variable_name.replace(" SCALED","")} fit.html',
-					include_plotlyjs = 'cdn',
-				)
+			if n_bootstrap == 0: # Means with real data.
+				try:
+					fig_background.update_layout(
+						title = f'{scaled_variable_name.replace(" SCALED","")} background model<br><sup>{bureaucrat.run_name}</sup>',
+						xaxis_title = scaled_variable_name.replace(" SCALED",""),
+						yaxis_title = 'Count',
+					)
+					fig.update_layout(
+						title = f'{scaled_variable_name.replace(" SCALED","")} fit<br><sup>{bureaucrat.run_name}</sup>',
+						xaxis_title = scaled_variable_name.replace(" SCALED",""),
+						yaxis_title = 'Count',
+					)
+					for _ in [fig,fig_background]:
+						_.update_yaxes(type='log', range=[numpy.log10(.5),numpy.log10(hist_max_for_the_plot_that_does_not_handle_it_automatically_yet*1.3)])
+					fig_background.write_html(
+						employee.path_to_directory_of_my_task/f'{scaled_variable_name} background model.html',
+						include_plotlyjs = 'cdn',
+					)
+					fig.write_html(
+						employee.path_to_directory_of_my_task/f'{scaled_variable_name.replace(" SCALED","")} fit.html',
+						include_plotlyjs = 'cdn',
+					)
+				except UnboundLocalError:
+					pass
 		
 		params_to_save = pandas.DataFrame.from_records(params_to_save).set_index(['variable','signal_name'])
 		
@@ -330,6 +313,135 @@ def Landau_fit_to_variable(bureaucrat:RunBureaucrat, time_from_trigger_backgroun
 		x_mpv = x_mpv.groupby(x_mpv.index.names).agg([numpy.nanmean, numpy.nanmedian, numpy.nanstd, kMAD])
 		save_dataframe(df=x_mpv, location=employee.path_to_directory_of_my_task, name='x_mpv')
 
+def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_from_trigger_background:dict, time_from_trigger_signal:dict, signal_name_trigger:str, n_bootstraps:int, collected_charge_variable_name:str, force:bool=False, number_of_processes:int=1):
+	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
+	
+	with bureaucrat.handle_task(f'fit_Landau_and_extract_MPV_sweeping_voltage_{collected_charge_variable_name.replace(" ","_")}') as employee:
+		subruns = bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
+		if number_of_processes == 1:
+			for subrun in subruns:
+				fit_Landau_and_extract_MPV(
+					bureaucrat = subrun,
+					time_from_trigger_background = time_from_trigger_background[subrun.run_name], 
+					time_from_trigger_signal = time_from_trigger_signal[subrun.run_name],
+					signal_name_trigger = signal_name_trigger, 
+					n_bootstraps = n_bootstraps,
+					collected_charge_variable_name = collected_charge_variable_name,
+					force = force,
+				)
+		else:
+			with multiprocessing.Pool(number_of_processes) as p:
+				starmap_checking_arguments_names(
+					pool = p,
+					func = fit_Landau_and_extract_MPV,
+					args = [
+						dict(
+							bureaucrat = subrun,
+							time_from_trigger_background = time_from_trigger_background[subrun.run_name], 
+							time_from_trigger_signal = time_from_trigger_signal[subrun.run_name],
+							signal_name_trigger = signal_name_trigger, 
+							n_bootstraps = n_bootstraps,
+							collected_charge_variable_name = collected_charge_variable_name,
+							force = force,
+						)
+						for subrun in subruns
+					],
+				)
+		
+		x_mpv, fits_results = read_MPV_data_from_Landau_fits(bureaucrat, collected_charge_variable_name)
+		summarized_data = read_summarized_data(bureaucrat)
+		summarized_data.columns = [' '.join(col) for col in summarized_data.columns]
+		summarized_data.reset_index('device_name',drop=False,inplace=True)
+		
+		for col in ['Bias voltage (V) mean','Bias voltage (V) std']:
+			fits_results = fits_results.join(summarized_data[col], on='run_name')
+			x_mpv = x_mpv.join(summarized_data[col], on='run_name')
+		
+		for name,df in {'fits_results':fits_results,'x_mpv':x_mpv}.items():
+			save_dataframe(df=df,name=name,location=employee.path_to_directory_of_my_task)
+		
+		for variable in set(x_mpv.index.get_level_values('variable')):
+			fig = line(
+				title = f'{variable} x<sub>MPV</sub><br><sup>{bureaucrat.run_name}</sup>',
+				data_frame = x_mpv.reset_index(drop=False).query(f'variable=="{variable}"').sort_values(['Bias voltage (V) mean','signal_name']),
+				x = 'Bias voltage (V) mean',
+				y = 'nanmedian',
+				error_x = 'Bias voltage (V) std',
+				error_y = 'kMAD',
+				color = 'signal_name',
+				markers = True,
+				labels = {
+					'nanmedian': f'{variable} x<sub>MPV</sub>',
+					'nanmean': f'{variable} x<sub>MPV</sub>',
+					'Bias voltage (V) mean': 'Bias voltage (V)',
+				}
+			)
+			fig.update_layout(xaxis = dict(autorange = "reversed"))
+			fig.write_html(employee.path_to_directory_of_my_task/f'x_mpv vs bias voltage.html', include_plotlyjs='cdn')
+
+def read_MPV_data_from_Landau_fits(bureaucrat:RunBureaucrat, collected_charge_variable_name:str):
+	if bureaucrat.was_task_run_successfully('beta_scan'):
+		task_name = f'fit_Landau_and_extract_MPV_{collected_charge_variable_name.replace(" ","_")}'
+		bureaucrat.check_these_tasks_were_run_successfully(task_name)
+		x_mpv = pandas.read_pickle(bureaucrat.path_to_directory_of_task(task_name)/'x_mpv.pickle')
+		fits_results = pandas.read_pickle(bureaucrat.path_to_directory_of_task(task_name)/'fits_results.pickle')
+		return x_mpv, fits_results
+	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
+		fits_results = []
+		x_mpv = []
+		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
+			x, f = read_MPV_data_from_Landau_fits(subrun, collected_charge_variable_name)
+			for _ in [f,x]:
+				_['run_name'] = subrun.run_name
+				_.set_index('run_name',inplace=True,append=True)
+			fits_results.append(f)
+			x_mpv.append(x)
+		fits_results = pandas.concat(fits_results)
+		x_mpv = pandas.concat(x_mpv)
+		return x_mpv, fits_results
+	else:
+		raise RuntimeError(f'Dont know how to read the Coulomb calibration factors in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}. ')
+
+def collected_charge_in_Coulomb(bureaucrat:RunBureaucrat, collected_charge_variable_name:str, conversion_factor_to_divide_by:float, conversion_factor_to_divide_by_error:float=float('NaN')):
+	task_name_where_to_look_for_data = f'fit_Landau_and_extract_MPV_sweeping_voltage_{collected_charge_variable_name.replace(" ","_")}'
+	bureaucrat.check_these_tasks_were_run_successfully(task_name_where_to_look_for_data)
+	
+	with bureaucrat.handle_task(f'collected_charge_in_Coulomb_using_{collected_charge_variable_name.replace(" ","_")}') as employee:
+		data = pandas.read_pickle(bureaucrat.path_to_directory_of_task(task_name_where_to_look_for_data)/'x_mpv.pickle')
+		
+		conversion_factor_to_divide_by = ufloat(conversion_factor_to_divide_by,conversion_factor_to_divide_by_error)
+		data['Collected charge (C) ufloat'] = numpy.array([ufloat(val,err) for val,err in zip(data['nanmedian'],data['nanstd'])])/conversion_factor_to_divide_by
+		data['Collected charge (C)'] = data['Collected charge (C) ufloat'].apply(lambda x: x.nominal_value)
+		data['Collected charge (C) error'] = data['Collected charge (C) ufloat'].apply(lambda x: x.std_dev)
+		
+		data.drop(columns=['nanmedian','nanstd','kMAD','nanmean','Collected charge (C) ufloat'], inplace=True)
+		
+		save_dataframe(
+			df = data,
+			name = 'collected_charge_vs_bias_voltage',
+			location = employee.path_to_directory_of_my_task,
+		)
+		
+		for variable in set(data.index.get_level_values('variable')):
+			fig = line(
+				title = f'Collected charge<br><sup>{bureaucrat.run_name}</sup>',
+				data_frame = data.reset_index(drop=False).query(f'variable=="{variable}"').sort_values(['Bias voltage (V) mean','signal_name']),
+				x = 'Bias voltage (V) mean',
+				y = 'Collected charge (C)',
+				error_x = 'Bias voltage (V) std',
+				error_y = 'Collected charge (C) error',
+				color = 'signal_name',
+				markers = True,
+				labels = {
+					'Bias voltage (V) mean': 'Bias voltage (V)',
+				}
+			)
+			fig.update_layout(
+				xaxis = dict(autorange = "reversed"), 
+				yaxis = dict(type='log'),
+			)
+			fig.write_html(employee.path_to_directory_of_my_task/f'charge vs bias voltage.html', include_plotlyjs='cdn')
+
 if __name__ == '__main__':
 	
 	import argparse
@@ -361,13 +473,28 @@ if __name__ == '__main__':
 	
 	args = parser.parse_args()
 	
+	COLLECTED_CHARGE_VARIABLE_NAME = 'Collected charge (V s)'
+	CONVERSION_FACTOR = {
+		'Amplitude (V)': dict(value=5.7e12, error=.250e12),
+		'Collected charge (V s)': dict(value=5e3,error=.250e3),
+	}
+	
 	bureaucrat = RunBureaucrat(Path(args.directory))
-	Landau_fit_to_variable(
+	subruns = bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage')
+	SIGNALS_NAMES = {'DUT_CH1'}
+	fit_Landau_and_extract_MPV_sweeping_voltage(
 		bureaucrat = bureaucrat,
-		time_from_trigger_signal = {_:(1.4e-9,1.7e-9) for _ in {'DUT_CH1','DUT_CH2','DUT_CH3'}},
-		time_from_trigger_background = {_:(-5e-9,1e-9) for _ in {'DUT_CH1','DUT_CH2','DUT_CH3'}},
+		time_from_trigger_signal = {subrun.run_name:{_:(1e-9,2e-9) for _ in SIGNALS_NAMES} for subrun in subruns},
+		time_from_trigger_background = {subrun.run_name:{_:(-5e-9,0e-9) for _ in SIGNALS_NAMES} for subrun in subruns},
 		signal_name_trigger = 'MCP-PMT',
 		n_bootstraps = args.n_bootstraps,
 		force = args.force,
-		collected_charge_variable_name = 'Collected charge (V s)',
+		collected_charge_variable_name = COLLECTED_CHARGE_VARIABLE_NAME,
+		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)
+	# ~ collected_charge_in_Coulomb(
+		# ~ bureaucrat = bureaucrat, 
+		# ~ collected_charge_variable_name = COLLECTED_CHARGE_VARIABLE_NAME, 
+		# ~ conversion_factor_to_divide_by = CONVERSION_FACTOR[COLLECTED_CHARGE_VARIABLE_NAME]['value'],
+		# ~ conversion_factor_to_divide_by_error = CONVERSION_FACTOR[COLLECTED_CHARGE_VARIABLE_NAME]['error'],
+	# ~ )
