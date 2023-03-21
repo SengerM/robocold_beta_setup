@@ -283,7 +283,7 @@ def script_core(bureaucrat:RunBureaucrat, path_to_cuts_file:Path=None):
 		plots_of_clean_beta_scan_sweeping_bias_voltage(John, langauss_plots=True)
 	elif John.was_task_run_successfully('beta_scan'):
 		clean_beta_scan(John, path_to_cuts_file=path_to_cuts_file)
-		clean_beta_scan_plots(John)
+		clean_beta_scan_plots(John, distributions=True)
 	else:
 		raise RuntimeError(f'Dont know how to process run {repr(John.run_name)} located in {John.path_to_run_directory}.')
 
@@ -425,4 +425,8 @@ if __name__ == '__main__':
 	)
 
 	args = parser.parse_args()
-	script_core(RunBureaucrat(Path(args.directory)))
+	bureaucrat = RunBureaucrat(Path(args.directory))
+	# ~ script_core(bureaucrat)
+	automatic_cut_amplitude(bureaucrat, DUT_signal_name='DUT_CH1')
+	clean_beta_scan(bureaucrat, bureaucrat.path_to_directory_of_task('automatic_cut_amplitude')/'cuts.csv')
+	clean_beta_scan_plots(bureaucrat)

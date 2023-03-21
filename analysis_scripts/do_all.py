@@ -1,7 +1,7 @@
 from the_bureaucrat.bureaucrats import RunBureaucrat # https://github.com/SengerM/the_bureaucrat
 from pathlib import Path
 from clean_beta_scan import script_core as clean_beta_scan, create_cuts_file_template, automatic_cuts
-from collected_charge import script_core as collected_charge
+# ~ from collected_charge import script_core as collected_charge
 from jitter_calculation import script_core as jitter_calculation
 from time_resolution import script_core as time_resolution
 from summarize_parameters import summarize_beta_scan_measured_stuff_recursively as summarize_parameters
@@ -23,8 +23,8 @@ def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, path_to_cuts_file:Path
 	summarize_parameters(bureaucrat, force=force)
 	IV_curve_from_beta_scan_data(bureaucrat)
 	events_rate_vs_bias_voltage(bureaucrat, force=force, number_of_processes=number_of_processes)
-	if not skip_charge:
-		collected_charge(bureaucrat, DUT_signal_name=DUT_signal_name, force=force, number_of_processes=number_of_processes)
+	# ~ if not skip_charge:
+		# ~ collected_charge(bureaucrat, DUT_signal_name=DUT_signal_name, force=force, number_of_processes=number_of_processes)
 	if not skip_jitter:
 		jitter_calculation(
 			bureaucrat,
@@ -37,8 +37,8 @@ def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, path_to_cuts_file:Path
 		bureaucrat = bureaucrat,
 		DUT_signal_name = DUT_signal_name,
 		reference_signal_name = 'MCP-PMT',
-		reference_signal_time_resolution = 17.32e-12, # My best characterization of the Photonis PMT.
-		reference_signal_time_resolution_error = 2.16e-12, # My best characterization of the Photonis PMT.
+		reference_signal_time_resolution = 17.5e-12, # Photonis PMT.
+		reference_signal_time_resolution_error = 2.5e-12, # Photonis PMT.
 	)
 	noise_in_beta_scan(
 		bureaucrat = bureaucrat,
@@ -54,7 +54,8 @@ if __name__ == '__main__':
 	grafica.plotly_utils.utils.set_my_template_as_default()
 
 	parser = argparse.ArgumentParser(description='Cleans a beta scan according to some criterion.')
-	parser.add_argument('--dir',
+	parser.add_argument(
+		'--dir',
 		metavar = 'path',
 		help = 'Path to the base measurement directory.',
 		required = True,
@@ -88,7 +89,6 @@ if __name__ == '__main__':
 			plot_beta_scan(bureaucrat)
 			exit()
 	else:
-		automatic_cuts(bureaucrat)
 		automatic_cuts(bureaucrat, DUT_signal_name=DUT_SIGNAL_NAME)
 		path_to_cuts_file = bureaucrat.path_to_directory_of_task('automatic_cuts')/'cuts.csv'
 	
@@ -97,7 +97,7 @@ if __name__ == '__main__':
 		path_to_cuts_file = path_to_cuts_file,
 		skip_charge = False,
 		skip_jitter = False,
-		CFD_thresholds = {DUT_SIGNAL_NAME: 'best', 'MCP-PMT': 'best'},
+		CFD_thresholds = {DUT_SIGNAL_NAME: 'best', 'MCP-PMT': 20},
 		force = args.force,
 		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)

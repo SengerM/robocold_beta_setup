@@ -13,18 +13,9 @@ from clean_beta_scan import tag_n_trigger_as_background_according_to_the_result_
 import multiprocessing
 from summarize_parameters import read_summarized_data
 import dominate # https://github.com/Knio/dominate
+from utils import kMAD, gaussian
 
 N_BOOTSTRAP = 33
-
-def kMAD(x,nan_policy='omit'):
-	"""Calculates the median absolute deviation multiplied by 1.4826... 
-	which should converge to the standard deviation for Gaussian distributions,
-	but is much more robust to outliers than the std."""
-	k_MAD_TO_STD = 1.4826 # https://en.wikipedia.org/wiki/Median_absolute_deviation#Relation_to_standard_deviation
-	return k_MAD_TO_STD*median_abs_deviation(x,nan_policy=nan_policy)
-
-def gaussian(x, mu, sigma, amplitude=1):
-	return amplitude/sigma/(2*np.pi)**.5*np.exp(-((x-mu)/sigma)**2/2)
 
 def fit_gaussian_to_samples(samples, bins='auto', nan_policy='drop'):
 	if nan_policy == 'drop':
@@ -557,7 +548,7 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	script_core(
 		RunBureaucrat(Path(args.directory)),
-		CFD_thresholds = {'DUT_CH4': 'best', 'MCP-PMT': 'best'},
+		CFD_thresholds = {'DUT_CH1': 'best', 'MCP-PMT': 20},
 		force = args.force,
 		number_of_processes = max(multiprocessing.cpu_count()-1,1),
 	)

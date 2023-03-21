@@ -6,7 +6,7 @@ import grafica.plotly_utils.utils # https://github.com/SengerM/grafica
 from uncertainties import ufloat
 from huge_dataframe.SQLiteDataFrame import load_whole_dataframe # https://github.com/SengerM/huge_dataframe
 from summarize_parameters import read_summarized_data
-from collected_charge import read_collected_charge
+from utils import save_dataframe
 
 def time_resolution_DUT_and_reference(bureaucrat:RunBureaucrat, DUT_signal_name:str, reference_signal_name:str, reference_signal_time_resolution:float, reference_signal_time_resolution_error:float):
 	bureaucrat.check_these_tasks_were_run_successfully(['beta_scan','jitter_calculation_beta_scan'])
@@ -91,11 +91,13 @@ def time_resolution_DUT_and_reference_vs_bias_voltage(bureaucrat:RunBureaucrat, 
 		time_resolution.reset_index(level='signal_name', inplace=True, drop=True)
 		summary.reset_index(level='device_name', inplace=True)
 		
-		time_resolution.to_pickle(employee.path_to_directory_of_my_task/'time_resolution.pickle')
+		
+		time_resolution = time_resolution.join(summary).sort_values('Bias voltage (V) mean')
+		save_dataframe(time_resolution, name='time_resolution', location=employee.path_to_directory_of_my_task)
 		
 		fig = px.line(
 			title = f'Time resolution vs bias voltage with beta source<br><sup>Run: {bureaucrat.run_name}</sup>',
-			data_frame = time_resolution.join(summary).sort_values('Bias voltage (V) mean'),
+			data_frame = time_resolution,
 			x = 'Bias voltage (V) mean',
 			y = 'Time resolution (s)',
 			error_x = 'Bias voltage (V) std',

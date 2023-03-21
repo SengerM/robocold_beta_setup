@@ -149,6 +149,11 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 					include_plotlyjs = 'cdn',
 				)
 		
+		A = parsed_from_waveforms_df['t_50 (s)']
+		B = parsed_from_waveforms_df.query('signal_name == "MCP-PMT"')['t_50 (s)'].reset_index('signal_name', drop=True)
+		t_from_ref = (A - B)
+		parsed_from_waveforms_df['t_50 - t_50_MCP-PMT (s)'] = t_from_ref
+		
 		df = parsed_from_waveforms_df.reset_index().drop({'n_waveform'}, axis=1).sort_values('signal_name')
 		path_to_save_plots = task_bureaucrat.path_to_directory_of_my_task/Path('parsed_from_waveforms')
 		path_to_save_plots.mkdir()
@@ -230,7 +235,7 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 				# ~ include_plotlyjs = 'cdn',
 			# ~ )
 		
-		for variables in {('t_50 (s)','Amplitude (V)')}:
+		for variables in {('t_50 (s)','Amplitude (V)'), ('t_50 (s)','Collected charge (V s)'), ('t_50 - t_50_MCP-PMT (s)','Amplitude (V)')}:
 			fig = px.scatter(
 				data_frame = parsed_from_waveforms_df.reset_index().sort_values('signal_name'),
 				x = variables[0],
