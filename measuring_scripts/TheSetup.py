@@ -567,15 +567,15 @@ def load_beta_scans_configuration()->pandas.DataFrame:
 	return pandas.read_csv(PATH_TO_CONFIGURATION_FILES_DIRECTORY/'beta_scans_configuration.csv').set_index(['slot_number'])
 	
 if __name__=='__main__':
-	from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
+	from progressreporting.TelegramProgressReporter import SafeTelegramReporter4Loops # https://github.com/SengerM/progressreporting
 	import my_telegram_bots
 	
 	class TheSetupManager(BaseManager):
 		pass
 	
-	reporter = TelegramReporter(
-		telegram_token = my_telegram_bots.robobot.token,
-		telegram_chat_id = my_telegram_bots.chat_ids['Long term tests setup'],
+	reporter = SafeTelegramReporter4Loops(
+		bot_token = my_telegram_bots.robobot.token,
+		chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
 	)
 	
 	print('Opening the setup...')
