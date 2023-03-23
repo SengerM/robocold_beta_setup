@@ -144,8 +144,14 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 	with the_setup.hold_signal_acquisition(who=name_to_access_to_the_setup), the_setup.hold_control_of_bias_for_slot_number(slot_number, who=name_to_access_to_the_setup), the_setup.hold_control_of_robocold(who=name_to_access_to_the_setup):
 		if not silent:
 			print('Control of hardware acquired.')
-		# ~ the_setup.set_trigger_for_beta_scans(who=name_to_access_to_the_setup)
 		with John.handle_task('beta_scan') as beta_scan_task_bureaucrat:
+			the_setup.set_trigger_for_beta_scans(who=name_to_access_to_the_setup)
+			if not silent:
+				print(f'Moving beta source to slot {slot_number}...')
+			the_setup.move_to_slot(slot_number=slot_number, who=name_to_access_to_the_setup)
+			if not silent:
+				print(f'Connecting slot {slot_number} to the oscilloscope...')
+			the_setup.connect_slot_to_oscilloscope(slot_number=slot_number, who=name_to_access_to_the_setup)
 			with open(beta_scan_task_bureaucrat.path_to_directory_of_my_task/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
 			the_setup.get_slots_configuration_df().to_csv(beta_scan_task_bureaucrat.path_to_directory_of_my_task/'slots_configuration.csv')
@@ -218,7 +224,7 @@ def beta_scan(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, slot_nu
 									str(path_to_save_plots/Path(f'n_trigger {n_trigger} signal_name {signal_name}.html')),
 									include_plotlyjs = 'cdn',
 								)
-						reporter.update(1) 
+						reporter.update(1) if reporter is not None else None
 	
 	if not silent:
 		print('Beta scan finished.')
@@ -267,7 +273,6 @@ def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_
 		with John.handle_task('beta_scan_sweeping_bias_voltage') as beta_scan_sweeping_bias_voltage_task_bureaucrat:
 			with open(beta_scan_sweeping_bias_voltage_task_bureaucrat.path_to_directory_of_my_task/'setup_description.txt','w') as ofile:
 				print(the_setup.get_description(), file=ofile)
-			
 			with reporter.report_loop(len(bias_voltages), John.run_name) if reporter is not None else nullcontext() as reporter:
 				if software_triggers is None:
 					software_triggers = [lambda x: True for v in bias_voltages]
@@ -280,6 +285,6 @@ def beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucrat, name_to_access_to_
 						bias_voltage = bias_voltage,
 						software_trigger = software_trigger,
 						silent = silent,
-						reporter = reporter.create_subloop_reporter()
+						reporter = reporter.create_subloop_reporter() if reporter is not None else None,
 					)
-					reporter.update(1)
+					reporter.update(1) if reporter is not None else None

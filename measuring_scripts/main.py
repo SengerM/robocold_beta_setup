@@ -9,6 +9,7 @@ from utils import create_a_timestamp
 from grafica.plotly_utils.utils import set_my_template_as_default # https://github.com/SengerM/grafica
 from progressreporting.TelegramProgressReporter import SafeTelegramReporter4Loops # https://github.com/SengerM/progressreporting
 import my_telegram_bots # Here I keep the info from my bots, never make it public!
+from contextlib import nullcontext
 
 def automatic_measurements(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str, beta_scans_configuration_df:pandas.DataFrame, silent:bool=False, reporter:SafeTelegramReporter4Loops=None):
 	the_setup = connect_me_with_the_setup()
@@ -21,7 +22,7 @@ def automatic_measurements(bureaucrat:RunBureaucrat, name_to_access_to_the_setup
 			with reporter.report_loop(len(beta_scans_configuration_df.index.unique()), bureaucrat.run_name) if reporter is not None else nullcontext() as reporter:
 				for slot_number in beta_scans_configuration_df.index.unique():
 					with the_setup.hold_control_of_bias_for_slot_number(slot_number=slot_number, who=name_to_access_to_the_setup):
-						John = employee.create_subrun(f'{create_a_timestamp()}_{the_setup.get_name_of_device_in_slot_number(slot_number)}_Chubut1')
+						John = employee.create_subrun(f'{create_a_timestamp()}_{the_setup.get_name_of_device_in_slot_number(slot_number)}')
 						
 						# Beta scan -----
 						if not silent:
@@ -37,14 +38,14 @@ def automatic_measurements(bureaucrat:RunBureaucrat, name_to_access_to_the_setup
 							bias_voltages = beta_scans_configuration_df.loc[slot_number,'Bias voltage (V)'],
 							software_triggers = beta_scans_configuration_df.loc[slot_number,'software_trigger'],
 							silent = silent,
-							reporter = reporter.create_subloop_reporter(),
+							reporter = reporter.create_subloop_reporter() if reporter is not None else None,
 						)
 						if not silent:
 							print(f'Beta scan sweeping bias voltage on slot {slot_number} finished.')
 						
 						if not silent:
 							print(f'Automatic measurements on slot {slot_number} finished :)')
-						reporter.update(1)
+						reporter.update(1) if reporter is not None else None
 
 if __name__=='__main__':
 	import os
@@ -55,15 +56,17 @@ if __name__=='__main__':
 	from plot_beta_scan import plot_everything_from_beta_scan
 	
 	set_my_template_as_default()
+	
 	def software_trigger(signals_dict, minimum_DUT_amplitude:float):
-		DUT_signal = signals_dict['DUT']
-		PMT_signal = signals_dict['MCP-PMT']
-		try:
-			is_peak_in_correct_time_window = 1e-9 < float(DUT_signal.find_time_at_rising_edge(50)) - float(PMT_signal.find_time_at_rising_edge(50)) < 5.5e-9
-		except Exception:
-			is_peak_in_correct_time_window = False
-		is_DUT_amplitude_above_threshold = DUT_signal.amplitude > minimum_DUT_amplitude
-		return is_peak_in_correct_time_window and is_DUT_amplitude_above_threshold
+		return True
+		# ~ DUT_signal = signals_dict['DUT']
+		# ~ PMT_signal = signals_dict['MCP-PMT']
+		# ~ try:
+			# ~ is_peak_in_correct_time_window = 1e-9 < float(DUT_signal.find_time_at_rising_edge(50)) - float(PMT_signal.find_time_at_rising_edge(50)) < 5.5e-9
+		# ~ except Exception:
+			# ~ is_peak_in_correct_time_window = False
+		# ~ is_DUT_amplitude_above_threshold = DUT_signal.amplitude > minimum_DUT_amplitude
+		# ~ return is_peak_in_correct_time_window and is_DUT_amplitude_above_threshold
 	
 	NAME_TO_ACCESS_TO_THE_SETUP = f'beta scan PID: {os.getpid()}'
 	beta_scans_configuration_df = load_beta_scans_configuration()
@@ -77,8 +80,8 @@ if __name__=='__main__':
 		bureaucrat = Alberto,
 		name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 		beta_scans_configuration_df = beta_scans_configuration_df,
-		reporter = SafeTelegramReporter4Loops(
-			bot_token = my_telegram_bots.robobot.token,
-			chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
-		)
+		# ~ reporter = SafeTelegramReporter4Loops(
+			# ~ bot_token = my_telegram_bots.robobot.token,
+			# ~ chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
+		# ~ )
 	)
