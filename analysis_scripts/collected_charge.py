@@ -142,7 +142,7 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 							bins = bin_edges,
 						)
 					)
-					x_axis = numpy.array(sorted(list(samples_background.sample(n=99)) + list(numpy.linspace(samples_background.min(),samples_background.max(),99))))
+					x_axis = numpy.array(sorted(list(samples_background.sample(n=99, replace=True)) + list(numpy.linspace(samples_background.min(),samples_background.max(),99))))
 					fig_background.add_trace(
 						go.Scatter(
 							x = x_axis/scale_factor_for_comfortable_fit,
@@ -224,7 +224,7 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 							bins = bin_edges/scale_factor_for_comfortable_fit,
 						)
 					)
-					x_axis = numpy.array(sorted(list(samples_with_signal_and_background.sample(n=99)) + list(numpy.linspace(samples_with_signal_and_background.min(),samples_with_signal_and_background.max(),99))))
+					x_axis = numpy.array(sorted(list(samples_with_signal_and_background.sample(n=99,replace=True)) + list(numpy.linspace(samples_with_signal_and_background.min(),samples_with_signal_and_background.max(),99))))
 					fig.add_trace(
 						go.Scatter(
 							x = x_axis/scale_factor_for_comfortable_fit,
