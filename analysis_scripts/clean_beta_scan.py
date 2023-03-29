@@ -340,6 +340,9 @@ def automatic_cut_amplitude(bureaucrat:RunBureaucrat, DUT_signal_name:str):
 	with bureaucrat.handle_task('automatic_cut_amplitude') as employee:
 		data = load_whole_dataframe(bureaucrat.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 		
+		if DUT_signal_name not in set(data.index.get_level_values('signal_name')):
+			raise RuntimeError(f'`DUT_signal_name={repr(DUT_signal_name)}` not present in data, available signals names are {set(data.index.get_level_values("signal_name"))}. ')
+		
 		data = data.query(f'signal_name=="{DUT_signal_name}"')
 		
 		x = data['Amplitude (V)']
