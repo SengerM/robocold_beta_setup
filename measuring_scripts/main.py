@@ -34,9 +34,9 @@ def automatic_measurements(bureaucrat:RunBureaucrat, name_to_access_to_the_setup
 							bureaucrat = John,
 							name_to_access_to_the_setup = name_to_access_to_the_setup,
 							slot_number = slot_number,
-							n_triggers_per_voltage = beta_scans_configuration_df.loc[slot_number,'n_triggers'], 
-							bias_voltages = beta_scans_configuration_df.loc[slot_number,'Bias voltage (V)'],
-							software_triggers = beta_scans_configuration_df.loc[slot_number,'software_trigger'],
+							n_triggers_per_voltage = beta_scans_configuration_df.loc[[slot_number],'n_triggers'], 
+							bias_voltages = beta_scans_configuration_df.loc[[slot_number],'Bias voltage (V)'],
+							software_triggers = beta_scans_configuration_df.loc[[slot_number],'software_trigger'],
 							silent = silent,
 							reporter = reporter.create_subloop_reporter() if reporter is not None else None,
 						)
