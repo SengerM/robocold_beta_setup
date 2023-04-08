@@ -10,10 +10,11 @@ import warnings
 import sys 
 sys.path.append(str(Path.home()/'scripts_and_codes/repos/robocold_beta_setup/analysis_scripts'))
 from plot_iv_curves import plot_IV_curves_all_together
-from progressreporting.TelegramProgressReporter import TelegramReporter # https://github.com/SengerM/progressreporting
+from progressreporting.TelegramProgressReporter import SafeTelegramReporter4Loops # https://github.com/SengerM/progressreporting
 import my_telegram_bots
+from contextlib import nullcontext
 
-def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent=False, reporter:TelegramReporter=None):
+def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent=False, reporter:SafeTelegramReporter4Loops=None):
 	"""Measure an IV curve.
 	Parameters
 	----------
@@ -34,11 +35,9 @@ def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n
 	"""
 	
 	John = bureaucrat
-	John.create_run()
+	John.create_run(if_exists='skip')
 	
 	the_setup = connect_me_with_the_setup()
-	
-	report_progress = reporter is not None
 	
 	if not silent:
 		print('Waiting for acquiring control of the hardware.')
@@ -58,7 +57,7 @@ def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n
 					except Exception as e:
 						if '#BD:00,VAL:ERR' in str(e):
 							warnings.warn(f'Cannot measure slot {slot_number} at voltage {voltage}, reason: `{e}`, will skip this point.')
-							reporter.update(n_measurements_per_voltage)
+							reporter.update(n_measurements_per_voltage) if reporter is not None else None
 							continue
 						else:
 							raise e
@@ -84,8 +83,7 @@ def measure_iv_curve(bureaucrat:RunBureaucrat, voltages:list, slot_number:int, n
 						measured_data_df.set_index(['n_voltage','n_measurement'], inplace=True)
 						measured_data_dumper.append(measured_data_df)
 						time.sleep(.5)
-						if report_progress:
-							reporter.update(1)
+						reporter.update(1) if reporter is not None else None
 	if not silent:
 		print(f'Finished measuring IV curve on slot {slot_number}...')
 
@@ -111,7 +109,7 @@ def measure_iv_curves_on_multiple_slots(bureaucrat:RunBureaucrat, voltages:dict,
 	"""
 	
 	class MeasureIVCurveThread(threading.Thread):
-		def __init__(self, bureaucrat:RunBureaucrat, slot_number:int, voltages_to_measure:list, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent:bool, reporter:TelegramReporter):
+		def __init__(self, bureaucrat:RunBureaucrat, slot_number:int, voltages_to_measure:list, n_measurements_per_voltage:int, name_to_access_to_the_setup:str, current_compliance:float, silent:bool, reporter:SafeTelegramReporter4Loops):
 			threading.Thread.__init__(self)
 			self.bureaucrat = bureaucrat
 			self.slot_number = slot_number
@@ -134,7 +132,7 @@ def measure_iv_curves_on_multiple_slots(bureaucrat:RunBureaucrat, voltages:dict,
 			)
 	
 	Richard = bureaucrat
-	Richard.create_run()
+	Richard.create_run(if_exists='skip')
 	
 	if any([not isinstance(_, dict) for _ in [voltages, current_compliances]]):
 		raise TypeError(f'`voltages` and `current_compliances` must be dictionaries, but at least one of them is not...')
@@ -143,13 +141,13 @@ def measure_iv_curves_on_multiple_slots(bureaucrat:RunBureaucrat, voltages:dict,
 	
 	the_setup = connect_me_with_the_setup()
 	
-	reporter = TelegramReporter(
-		telegram_token = my_telegram_bots.robobot.token, 
-		telegram_chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
+	reporter = SafeTelegramReporter4Loops(
+		bot_token = my_telegram_bots.robobot.token, 
+		chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
 	)
 	
 	with Richard.handle_task('measure_iv_curves_on_multiple_slots') as measure_iv_curves_on_multiple_slots_task_handler, \
-		reporter.report_for_loop(sum([len(v) for _,v in voltages.items()])*n_measurements_per_voltage, bureaucrat.run_name) as reporter \
+		reporter.report_loop(sum([len(v) for _,v in voltages.items()])*n_measurements_per_voltage, bureaucrat.run_name) as reporter \
 	:
 		threads = []
 		for slot_number in set(voltages):
@@ -192,20 +190,21 @@ if __name__=='__main__':
 	from configuration_files.current_run import Alberto
 	from utils import create_a_timestamp
 	
-	SLOTS = [1,2,3,4,5,6,7,8]
-	VOLTAGE_VALUES = list(numpy.linspace(0,500,99))
-	VOLTAGE_VALUES += VOLTAGE_VALUES[::-1]
-	VOLTAGES_FOR_EACH_SLOT = {slot: VOLTAGE_VALUES for slot in SLOTS}
-	CURRENT_COMPLIANCES = pandas.read_csv('configuration_files/standby_configuration.csv').set_index('slot_number')['Current compliance (A)'].to_dict()
-	NAME_TO_ACCESS_TO_THE_SETUP = f'IV curves measurement script PID: {os.getpid()}'
+	bias_config = pandas.read_csv('configuration_files/standby_configuration.csv').set_index('slot_number')
+	
+	voltages_for_each_slot = {}
+	for slot_number in bias_config.index.get_level_values('slot_number'):
+		_ = list(numpy.linspace(0,bias_config.loc[slot_number,'Max bias voltage (V)'],99))
+		_ += _[::-1] # Dual sweep.
+		voltages_for_each_slot[slot_number] = _
 	
 	with Alberto.handle_task('iv_curves', drop_old_data=False) as iv_curves_task_bureaucrat:
 		Mariano = iv_curves_task_bureaucrat.create_subrun(create_a_timestamp() + '_' + input('Measurement name? ').replace(' ','_'))
 		measure_iv_curves_on_multiple_slots(
 			bureaucrat = Mariano,
-			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
-			voltages = VOLTAGES_FOR_EACH_SLOT,
-			current_compliances = CURRENT_COMPLIANCES,
+			name_to_access_to_the_setup = f'IV curves measurement script PID: {os.getpid()}',
+			voltages = voltages_for_each_slot,
+			current_compliances = bias_config['Current compliance (A)'].to_dict(),
 			n_measurements_per_voltage = 2,
 			silent = False,
 		)

@@ -32,7 +32,7 @@ class TheRobocoldBetaSetup:
 		self.oscilloscope_configuration_df # This will trigger the load of the file, so if it fails it does now.
 		
 		# Hardware elements ---
-		self._oscilloscope = TeledyneLeCroyPy.LeCroyWaveRunner('USB0::0x05ff::0x1023::4751N40408::INSTR')
+		self._oscilloscope = TeledyneLeCroyPy.LeCroyWaveRunner('TCPIP::130.60.165.204::INSTR')
 		self._sensirion = EasySensirion.SensirionSensor()
 		self._caens = {
 			'13398': CAENDesktopHighVoltagePowerSupply(ip='130.60.165.119'), # DT1470ET, the new one.
@@ -587,6 +587,8 @@ if __name__=='__main__':
 	TheSetupManager.register('get_the_setup', callable=lambda:the_setup)
 	m = TheSetupManager(address=('', 50000), authkey=b'abracadabra')
 	s = m.get_server()
+	print('Connected with the setup:')
+	print(the_setup.description)
 	print('Ready!')
 	try:
 		s.serve_forever()

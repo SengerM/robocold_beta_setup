@@ -86,7 +86,8 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 							}
 							continue
 					
-					if n_bootstrap == 0 or numpy.random.rand() < 5/n_bootstraps: # Do a plot for this iteration.
+					path_for_these_plots = employee.path_to_directory_of_my_task/'some_random_plots_of_exponential_fits'
+					if not path_for_these_plots.is_dir() or numpy.random.rand() < 5/n_bootstraps: # Do a plot for this iteration.
 						fig = px.ecdf(
 							title = f'Auto trigger rate measurement (n_bootstrap={n_bootstrap})<br><sup>{bureaucrat.run_name}</sup>',
 							x = times_between_triggers,
@@ -107,7 +108,6 @@ def auto_trigger_rate(bureaucrat:RunBureaucrat, name_to_access_to_the_setup:str,
 						fig.update_layout(
 							xaxis_title = 't<sub>trigger i</sub> - t<sub>trigger i-1</sub> (s)',
 						)
-						path_for_these_plots = employee.path_to_directory_of_my_task/'some_random_plots_of_exponential_fits'
 						path_for_these_plots.mkdir(exist_ok=True)
 						fig.write_html(
 							path_for_these_plots/f'n_bootstrap_{n_bootstrap}.html',
@@ -247,6 +247,7 @@ def auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(bureaucrat:RunBure
 				x = 'Trigger level (V)',
 				markers = True,
 				log_y = True if 'rate' in var.lower() else False,
+				log_x = True,
 				labels = {
 					'Rate (events s^-1)': 'Rate (triggers/s)',
 				}
@@ -292,18 +293,16 @@ if __name__ == '__main__':
 	
 	NAME_TO_ACCESS_TO_THE_SETUP = f'auto trigger rate PID: {os.getpid()}'
 	
-	with Alberto.handle_task('auto_trigger', drop_old_data=False) as employee:
-		John = employee.create_subrun(create_a_timestamp() + '_test')
-		auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(
-			bureaucrat = John, 
-			name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
-			slot_number = 1,
-			bias_voltages = [250,280,300,310,315],
-			trigger_levels = numpy.logspace(numpy.log10(2e-3),numpy.log10(70e-3),111),
-			n_bootstraps = 11,
-			timeout_seconds = .1,
-			n_measurements_per_trigger = 1111,
-			maximum_timeout_seconds = 30,
-			silent = False,
-		)
+	auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(
+		bureaucrat = Alberto,
+		name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
+		slot_number = 8,
+		bias_voltages = [244,222,200,155],
+		trigger_levels = numpy.logspace(numpy.log10(1e-3),numpy.log10(70e-3),111),
+		n_bootstraps = 3,
+		timeout_seconds = .1,
+		n_measurements_per_trigger = 1111,
+		maximum_timeout_seconds = 30,
+		silent = False,
+	)
 	

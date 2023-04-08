@@ -1,9 +1,9 @@
-slot_number,Bias voltage (V),Current compliance (A),Measure once every (s)
-1,0,1.00E-05,666
-2,0,1.00E-05,666
-3,0,3E-06,666
-4,0,3E-06,666
-5,0,1.00E-05,666
-6,0,3E-06,666
-7,0,1.00E-05,666
-8,0,3E-06,666
+slot_number,Bias voltage (V),Current compliance (A),Measure once every (s),Max bias voltage (V)
+1,0,7.00E-06,666,555
+2,0,5.00E-06,666,500
+3,0,5.00E-06,666,500
+4,0,5.00E-06,666,500
+5,0,5.00E-06,666,500
+6,0,5.00E-06,666,500
+7,0,5.00E-06,666,500
+8,0,5.00E-06,666,244

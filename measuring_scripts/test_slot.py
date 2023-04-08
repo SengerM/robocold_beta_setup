@@ -1,10 +1,11 @@
 from TheSetup import connect_me_with_the_setup
 import time
 
-SLOT_NUMBER = 5
-BIAS_VOLTAGE = 0
-CURRENT_COMPLIANCE = 33e-6
+SLOT_NUMBER = 8
+BIAS_VOLTAGE = 200
+CURRENT_COMPLIANCE = 5e-6
 ROBOCOLD_OFFSET = (0,0)
+RESET_ROBOCOLD = False
 
 the_setup = connect_me_with_the_setup()
 
@@ -13,8 +14,10 @@ with the_setup.hold_control_of_bias_for_slot_number(SLOT_NUMBER,'me'), the_setup
 	print('Hardware acquired!')
 	print('Connecting to oscilloscope...')
 	the_setup.connect_slot_to_oscilloscope(SLOT_NUMBER, 'me')
+	if RESET_ROBOCOLD:
+		print('Reseting robocold...')
+		the_setup.reset_robocold('me')
 	print('Moving Robocold...')
-	# ~ the_setup.reset_robocold('me')
 	the_setup.move_to_slot(SLOT_NUMBER, 'me')
 	the_setup.set_robocold_position(tuple([x+offset for x,offset in zip(the_setup.get_robocold_position(),ROBOCOLD_OFFSET)]), who='me')
 	print('Setting bias voltage...')

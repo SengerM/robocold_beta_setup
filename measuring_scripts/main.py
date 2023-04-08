@@ -24,12 +24,31 @@ def automatic_measurements(bureaucrat:RunBureaucrat, name_to_access_to_the_setup
 					with the_setup.hold_control_of_bias_for_slot_number(slot_number=slot_number, who=name_to_access_to_the_setup):
 						John = employee.create_subrun(f'{create_a_timestamp()}_{the_setup.get_name_of_device_in_slot_number(slot_number)}')
 						
+						# Auto-trigger rate -----
+						if not silent:
+							print(f'Starting auto-trigger rate measurement for slot {slot_number}...')
+						auto_trigger_rate_sweeping_trigger_level_and_bias_voltage(
+							bureaucrat = John,
+							name_to_access_to_the_setup = name_to_access_to_the_setup,
+							slot_number = slot_number,
+							bias_voltages = sorted(set(list(beta_scans_configuration_df.loc[[slot_number],'Bias voltage (V)']) + [0])), # Adding 0 V because that should be only the electronic noise.
+							trigger_levels = numpy.array(sorted(set((numpy.logspace(numpy.log10(1e-3),numpy.log10(70e-3),111)*1e4).astype(int))))/1e4,
+							n_bootstraps = 11,
+							timeout_seconds = 2,
+							maximum_timeout_seconds = 30,
+							n_measurements_per_trigger = 1111,
+							silent = silent,
+						)
+						if not silent:
+							print(f'Auto-trigger rate sweeping bias voltage on slot {slot_number} finished.')
+						
 						# Beta scan -----
 						if not silent:
 							print(f'Reseting robocold...')
 						the_setup.reset_robocold(who=name_to_access_to_the_setup)
 						if not silent:
 							print(f'Starting beta scans sweeping bias voltage on slot {slot_number}...')
+						
 						beta_scan_sweeping_bias_voltage(
 							bureaucrat = John,
 							name_to_access_to_the_setup = name_to_access_to_the_setup,
@@ -58,11 +77,11 @@ if __name__=='__main__':
 	set_my_template_as_default()
 	
 	def software_trigger(signals_dict, minimum_DUT_amplitude:float):
-		return True
+		True
 		# ~ DUT_signal = signals_dict['DUT']
 		# ~ PMT_signal = signals_dict['MCP-PMT']
 		# ~ try:
-			# ~ is_peak_in_correct_time_window = 1e-9 < float(DUT_signal.find_time_at_rising_edge(50)) - float(PMT_signal.find_time_at_rising_edge(50)) < 5.5e-9
+			# ~ is_peak_in_correct_time_window = 1e-9 < float(DUT_signal.find_time_at_rising_edge(50)) - float(PMT_signal.find_time_at_rising_edge(50)) < 3e-9
 		# ~ except Exception:
 			# ~ is_peak_in_correct_time_window = False
 		# ~ is_DUT_amplitude_above_threshold = DUT_signal.amplitude > minimum_DUT_amplitude
@@ -73,15 +92,19 @@ if __name__=='__main__':
 	beta_scans_configuration_df['software_trigger'] = lambda x: software_trigger(x, 0)
 	
 	the_setup = connect_me_with_the_setup()
-	for slot_number in beta_scans_configuration_df.index.unique():
-		the_setup.set_current_compliance(slot_number=slot_number, amperes=99e-6, who=NAME_TO_ACCESS_TO_THE_SETUP)
+	
+	bias_config = pandas.read_csv('configuration_files/standby_configuration.csv').set_index('slot_number')
+	current_compliances = bias_config['Current compliance (A)'].to_dict()
+	for slot_number, current_compliance in current_compliances.items():
+		the_setup.set_current_compliance(slot_number=slot_number, amperes=current_compliance, who=NAME_TO_ACCESS_TO_THE_SETUP)
 	
 	automatic_measurements(
 		bureaucrat = Alberto,
 		name_to_access_to_the_setup = NAME_TO_ACCESS_TO_THE_SETUP,
 		beta_scans_configuration_df = beta_scans_configuration_df,
-		# ~ reporter = SafeTelegramReporter4Loops(
-			# ~ bot_token = my_telegram_bots.robobot.token,
-			# ~ chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
-		# ~ )
+		reporter = SafeTelegramReporter4Loops(
+			bot_token = my_telegram_bots.robobot.token,
+			chat_id = my_telegram_bots.chat_ids['Robobot beta setup'],
+		),
+		silent = False,
 	)
