@@ -293,7 +293,7 @@ def plot_everything_from_beta_scan_sweeping_bias_voltage(bureaucrat:RunBureaucra
 								dominate.tags.a(row['run_name'], href=row['path_to_plot'])
 				else:
 					with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
-						for idx,row in path_to_subplots_df.loc[plot_type].sort_values('run_name').iterrows():
+						for idx,row in path_to_subplots_df.loc[[plot_type]].sort_values('run_name').iterrows():
 							dominate.tags.iframe(src=str(row['path_to_plot']), style=f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;')
 			with open(Ernestos_employee.path_to_directory_of_my_task/f'{plot_type} together.html', 'w') as ofile:
 				print(html_doc, file=ofile)

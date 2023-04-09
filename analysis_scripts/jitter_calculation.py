@@ -475,7 +475,7 @@ def jitter_calculation_beta_scan_sweeping_voltage(bureaucrat:RunBureaucrat, CFD_
 			with html_doc:
 				dominate.tags.h1(document_title)
 				with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
-					for idx,row in path_to_subplots_df.loc[plot_type].sort_values('run_name').iterrows():
+					for idx,row in path_to_subplots_df.loc[[plot_type]].sort_values('run_name').iterrows():
 						dominate.tags.iframe(src=str(row['path_to_plot']), style=f'height: 100vh; min-height: 600px; width: 100%; min-width: 600px; border-style: none;')
 			path_for_saving_plots_all_together = Norbertos_employee.path_to_directory_of_my_task/f'plots_of_subruns'
 			path_for_saving_plots_all_together.mkdir(exist_ok=True)
