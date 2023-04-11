@@ -179,7 +179,7 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 				
 				model = Model(events_count_model, independent_vars=['x'])
 				params = model.make_params()
-				params['landau_x_mpv'].value = bin_centers[numpy.argmax(hist)]
+				params['landau_x_mpv'].value = bin_centers[2:][numpy.argmax(hist[2:])] # Remove the two first bin because usually the background is there.
 				params['landau_x_mpv'].min = 0
 				params['landau_xi'].value = median_abs_deviation(samples_with_signal_and_background)/5
 				params['landau_xi'].min = 0
