@@ -18,6 +18,7 @@ from lmfit import Model, Parameter, report_fit
 from uncertainties import ufloat
 from utils import my_std, save_dataframe, kMAD, get_function_arguments_names, hex_to_rgba, resample_by_n_trigger, starmap_checking_arguments_names
 from clean_beta_scan import tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan
+import dominate # https://github.com/Knio/dominate
 
 def signal_probability_density_model(x, landau_x_mpv, landau_xi, landau_gauss_sigma):
 	return langauss.pdf(x, landau_x_mpv, landau_xi, landau_gauss_sigma)
@@ -398,7 +399,23 @@ def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_f
 			)
 			fig.update_layout(xaxis = dict(autorange = "reversed"))
 			fig.write_html(employee.path_to_directory_of_my_task/f'x_mpv vs bias voltage.html', include_plotlyjs='cdn')
-
+		
+		collect_fitting_plots = True
+		if collect_fitting_plots:
+			path_to_subplots = []
+			document_title = f'Landau fits to {repr(collected_charge_variable_name)} {bureaucrat.run_name}'
+			html_doc = dominate.document(title=document_title)
+			with html_doc:
+				dominate.tags.h1(document_title)
+				with dominate.tags.div(style='display: flex; flex-direction: column; width: 100%;'):
+					for subrun in subruns:
+						dominate.tags.iframe(
+							src = str(Path('..')/(subrun.path_to_directory_of_task(f'fit_Landau_and_extract_MPV_{collected_charge_variable_name.replace(" ","_")}')/f'{collected_charge_variable_name} fit.html').relative_to(bureaucrat.path_to_run_directory)),
+							style = f'height: 100vh; min-height: 333px; width: 100%; min-width: 600px; border-style: none;'
+						)
+			with open(employee.path_to_directory_of_my_task/f'fits all together.html', 'w') as ofile:
+				print(html_doc, file=ofile)
+		
 def read_MPV_data_from_Landau_fits(bureaucrat:RunBureaucrat, collected_charge_variable_name:str):
 	if bureaucrat.was_task_run_successfully('beta_scan'):
 		task_name = f'fit_Landau_and_extract_MPV_{collected_charge_variable_name.replace(" ","_")}'
