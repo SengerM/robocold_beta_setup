@@ -49,7 +49,7 @@ def time_resolution_DUT_and_reference(bureaucrat:RunBureaucrat, DUT_signal_name:
 		)
 		time_resolution = pandas.DataFrame.from_records([DUT_time_resolution,reference_time_resolution])
 		time_resolution.set_index('signal_name',inplace=True)
-		time_resolution.to_pickle(employee.path_to_directory_of_my_task/'time_resolution.pickle')
+		save_dataframe(time_resolution, name='time_resolution', location=employee.path_to_directory_of_my_task)
 
 def read_time_resolution(bureaucrat:RunBureaucrat):
 	if bureaucrat.was_task_run_successfully('beta_scan'):
@@ -103,6 +103,9 @@ def time_resolution_DUT_and_reference_vs_bias_voltage(bureaucrat:RunBureaucrat, 
 			error_x = 'Bias voltage (V) std',
 			error_y = 'Time resolution (s) error',
 			markers = True,
+			labels = {
+				'Bias voltage (V) mean': 'Bias voltage (V)'
+			},
 		)
 		fig.update_layout(xaxis = dict(autorange = "reversed"))
 		fig.write_html(
