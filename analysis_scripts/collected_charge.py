@@ -222,6 +222,9 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 				_['signal_name'] = signal_name
 				_['variable'] = scaled_variable_name
 				_['kind_of_data'] = kind_of_data
+				_['fit_R_squared'] = result.rsquared
+				_['fit_chi_squared'] = result.chisqr
+				_['fit_reduced_chi_squared'] = result.redchi
 				params_to_save.append(_)
 				
 				if n_bootstrap == 0 and 'result' in locals(): # Means with real data.
