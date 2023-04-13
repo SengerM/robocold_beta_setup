@@ -124,7 +124,8 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 					kind_of_data = 'original'
 				else:
 					samples_with_signal_and_background = resample_by_n_trigger(samples_with_signal_and_background)
-					samples_background = resample_by_n_trigger(samples_background)
+					if len(samples_background) > 0:
+						samples_background = resample_by_n_trigger(samples_background)
 					kind_of_data = 'resampled'
 				
 				# Remove NaN values because fitting algorithms always cry otherwise...
@@ -133,8 +134,6 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 				
 				if len(samples_with_signal_and_background)==0:
 					raise RuntimeError(f'No signal events were found for `time_from_trigger_signal[signal_name]` = {repr(time_from_trigger_signal[signal_name])}. ')
-				if len(samples_background)==0:
-					raise RuntimeError(f'No background events were found for `time_from_trigger_background[signal_name]` = {repr(time_from_trigger_background[signal_name])}. ')
 				
 				try:
 					background_probability_density_model = gaussian_kde(samples_background)
@@ -143,28 +142,29 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 				
 				if n_bootstrap == 0: # Means with the real data so do a plot.
 					line_color = next(colors)
-					hist, bin_edges = numpy.histogram(samples_background/scale_factor_for_comfortable_fit, bins='auto', density=False)
-					fig_background.add_trace(
-						scatter_histogram(
-							samples = samples_background/scale_factor_for_comfortable_fit,
-							error_y = dict(type='auto'),
-							density = False,
-							name = f'{signal_name} background',
-							line = dict(color = line_color),
-							legendgroup = signal_name,
-							bins = bin_edges,
+					if len(samples_background) > 1:
+						hist, bin_edges = numpy.histogram(samples_background/scale_factor_for_comfortable_fit, bins='auto', density=False)
+						fig_background.add_trace(
+							scatter_histogram(
+								samples = samples_background/scale_factor_for_comfortable_fit,
+								error_y = dict(type='auto'),
+								density = False,
+								name = f'{signal_name} background',
+								line = dict(color = line_color),
+								legendgroup = signal_name,
+								bins = bin_edges,
+							)
 						)
-					)
-					x_axis = numpy.array(sorted(list(samples_background.sample(n=99, replace=True)) + list(numpy.linspace(samples_background.min(),samples_background.max(),99))))
-					fig_background.add_trace(
-						go.Scatter(
-							x = x_axis/scale_factor_for_comfortable_fit,
-							y = background_probability_density_model(x_axis)*numpy.diff(bin_edges)[0]*len(samples_background)*scale_factor_for_comfortable_fit,
-							name = f'{signal_name} background model',
-							line = dict(color = line_color, dash='dash'),
-							legendgroup = signal_name,
+						x_axis = numpy.array(sorted(list(samples_background.sample(n=99, replace=True)) + list(numpy.linspace(samples_background.min(),samples_background.max(),99))))
+						fig_background.add_trace(
+							go.Scatter(
+								x = x_axis/scale_factor_for_comfortable_fit,
+								y = background_probability_density_model(x_axis)*numpy.diff(bin_edges)[0]*len(samples_background)*scale_factor_for_comfortable_fit,
+								name = f'{signal_name} background model',
+								line = dict(color = line_color, dash='dash'),
+								legendgroup = signal_name,
+							)
 						)
-					)
 				
 				hist, bin_edges = numpy.histogram(samples_with_signal_and_background, bins='auto', density=False)
 				bin_centers = bin_edges[:-1] + numpy.diff(bin_edges)/2
@@ -201,10 +201,10 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 				_sigmas = 1
 				params['n_background'].value = _background_rate_estimation*abs(numpy.diff(time_from_trigger_signal[signal_name])[0])
 				params['n_background'].min = max(0, params['n_background'].value - _sigmas*params['n_background'].value**.5)
-				params['n_background'].max = params['n_background'].value + _sigmas*params['n_background'].value**.5
+				params['n_background'].max = max(1,params['n_background'].value + _sigmas*params['n_background'].value**.5)
 				params['n_signal'].value = len(samples_with_signal_and_background) - params['n_background'].value
 				params['n_signal'].min = max(0, params['n_signal'].value - _sigmas*params['n_signal'].value)
-				params['n_signal'].max = params['n_signal'].value + _sigmas*params['n_signal'].value
+				params['n_signal'].max = max(1,params['n_signal'].value + _sigmas*params['n_signal'].value)
 				params['n_background'].vary = True
 				params['n_signal'].vary = True
 				
