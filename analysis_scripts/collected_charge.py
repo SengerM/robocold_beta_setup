@@ -215,7 +215,6 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 					try:
 						result = model.fit(hist, params, x=bin_centers)
 						_ = {param_name: result.params[param_name].value for param_name in result.params}
-						
 					except Exception as e:
 						warnings.warn(f'Cannot fit signal_name {repr(signal_name)}, variable {repr(variable)}, n_bootstrap {repr(n_bootstrap)}, run {repr(bureaucrat.run_name)}. Reason: {e}')
 						_ = {param_name: numpy.nan for param_name in params}
@@ -252,7 +251,7 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 						go.Scatter(
 							x = x_axis/scale_factor_for_comfortable_fit,
 							y = events_count_model(x_axis, **{p:result.params[p].value for p in result.params}),
-							name = f'{signal_name} model' + '<br>'.join([''] + [f'{PARAMS_LABELS[param_name]}: {int(result.params[param_name].value)}' for param_name in ['n_signal','n_background']]),
+							name = f'{signal_name} model (fit R<sup>2</sup>={result.rsquared:.2f})' + '<br>'.join([''] + [f'{PARAMS_LABELS[param_name]}: {int(result.params[param_name].value)}' for param_name in ['n_signal','n_background']]),
 							line = dict(color = line_color, dash='dash'),
 							legendgroup = signal_name,
 						)
@@ -523,7 +522,7 @@ if __name__ == '__main__':
 		'Collected charge (V s)': {'val': 5050, 'err': 250},
 	}
 	
-	for variable in ['Amplitude (V)']:
+	for variable in ['Amplitude (V)','Collected charge (V s)']:
 		with warnings.catch_warnings():
 			warnings.filterwarnings("ignore", 'Your `task_name` is ')
 			fit_Landau_and_extract_MPV_sweeping_voltage(
