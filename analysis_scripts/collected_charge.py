@@ -333,7 +333,7 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 		x_mpv = x_mpv.groupby(x_mpv.index.names).agg([numpy.nanmean, numpy.nanmedian, numpy.nanstd, kMAD])
 		save_dataframe(df=x_mpv, location=employee.path_to_directory_of_my_task, name='x_mpv')
 
-def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_from_trigger_background:dict, time_from_trigger_signal:dict, signal_name_trigger:str, n_bootstraps:int, collected_charge_variable_name:str, force:bool=False, number_of_processes:int=1):
+def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_from_trigger_background:dict, time_from_trigger_signal:dict, signal_name_trigger:str, n_bootstraps:int, collected_charge_variable_name:str, force:bool=False, number_of_processes:int=1, use_clean_beta_scan:bool=True):
 	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
 	with bureaucrat.handle_task(f'fit_Landau_and_extract_MPV_sweeping_voltage_{collected_charge_variable_name.replace(" ","_")}') as employee:
@@ -348,6 +348,7 @@ def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_f
 					n_bootstraps = n_bootstraps,
 					collected_charge_variable_name = collected_charge_variable_name,
 					force = force,
+					use_clean_beta_scan = use_clean_beta_scan,
 				)
 		else:
 			with multiprocessing.Pool(number_of_processes) as p:
@@ -363,7 +364,7 @@ def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_f
 							n_bootstraps = n_bootstraps,
 							collected_charge_variable_name = collected_charge_variable_name,
 							force = force,
-							use_clean_beta_scan = True,
+							use_clean_beta_scan = use_clean_beta_scan,
 						)
 						for subrun in subruns
 					],
@@ -531,6 +532,7 @@ if __name__ == '__main__':
 				force = args.force,
 				collected_charge_variable_name = variable,
 				number_of_processes = max(multiprocessing.cpu_count()-2,1),
+				use_clean_beta_scan = True,
 			)
 			collected_charge_in_Coulomb(
 				bureaucrat = bureaucrat,
