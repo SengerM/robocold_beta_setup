@@ -330,12 +330,8 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 			)
 		
 		save_dataframe(df=params_to_save, location=employee.path_to_directory_of_my_task, name='fits_results')
-		
-		x_mpv = params_to_save['landau_x_mpv']
-		x_mpv = x_mpv.groupby(x_mpv.index.names).agg([numpy.nanmean, numpy.nanmedian, numpy.nanstd, kMAD])
-		save_dataframe(df=x_mpv, location=employee.path_to_directory_of_my_task, name='x_mpv')
 
-def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_from_trigger_background:dict, time_from_trigger_signal:dict, signal_name_trigger:str, n_bootstraps:int, collected_charge_variable_name:str, force:bool=False, number_of_processes:int=1, use_clean_beta_scan:bool=True):
+def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_from_trigger_background:dict, time_from_trigger_signal:dict, signal_name_trigger:str, n_bootstraps:int, collected_charge_variable_name:str, force:bool=False, number_of_processes:int=1, use_clean_beta_scan:bool=True, fit_R_squared_threshold_when_aggregating_x_mpv:float=None):
 	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
 	with bureaucrat.handle_task(f'fit_Landau_and_extract_MPV_sweeping_voltage_{collected_charge_variable_name.replace(" ","_")}') as employee:
@@ -372,10 +368,16 @@ def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_f
 					],
 				)
 		
-		x_mpv, fits_results = read_MPV_data_from_Landau_fits(bureaucrat, collected_charge_variable_name)
+		fits_results = read_MPV_data_from_Landau_fits(bureaucrat, collected_charge_variable_name)
 		summarized_data = read_summarized_data(bureaucrat)
 		summarized_data.columns = [' '.join(col) for col in summarized_data.columns]
 		summarized_data.reset_index('device_name',drop=False,inplace=True)
+		
+		if fit_R_squared_threshold_when_aggregating_x_mpv is not None:
+			fits_results = fits_results.query(f'fit_R_squared>={fit_R_squared_threshold_when_aggregating_x_mpv}')
+		
+		x_mpv = fits_results['landau_x_mpv']
+		x_mpv = x_mpv.groupby(x_mpv.index.names).agg([numpy.nanmean, numpy.nanmedian, numpy.nanstd, kMAD])
 		
 		for col in ['Bias voltage (V) mean','Bias voltage (V) std']:
 			fits_results = fits_results.join(summarized_data[col], on='run_name')
@@ -423,22 +425,18 @@ def read_MPV_data_from_Landau_fits(bureaucrat:RunBureaucrat, collected_charge_va
 	if bureaucrat.was_task_run_successfully('beta_scan'):
 		task_name = f'fit_Landau_and_extract_MPV_{collected_charge_variable_name.replace(" ","_")}'
 		bureaucrat.check_these_tasks_were_run_successfully(task_name)
-		x_mpv = pandas.read_pickle(bureaucrat.path_to_directory_of_task(task_name)/'x_mpv.pickle')
 		fits_results = pandas.read_pickle(bureaucrat.path_to_directory_of_task(task_name)/'fits_results.pickle')
-		return x_mpv, fits_results
+		return fits_results
 	elif bureaucrat.was_task_run_successfully('beta_scan_sweeping_bias_voltage'):
 		fits_results = []
-		x_mpv = []
 		for subrun in bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'):
-			x, f = read_MPV_data_from_Landau_fits(subrun, collected_charge_variable_name)
-			for _ in [f,x]:
+			f = read_MPV_data_from_Landau_fits(subrun, collected_charge_variable_name)
+			for _ in [f]:
 				_['run_name'] = subrun.run_name
 				_.set_index('run_name',inplace=True,append=True)
 			fits_results.append(f)
-			x_mpv.append(x)
 		fits_results = pandas.concat(fits_results)
-		x_mpv = pandas.concat(x_mpv)
-		return x_mpv, fits_results
+		return fits_results
 	else:
 		raise RuntimeError(f'Dont know how to read the Coulomb calibration factors in run {repr(bureaucrat.run_name)} located in {repr(str(bureaucrat.path_to_run_directory))}. ')
 
@@ -535,6 +533,7 @@ if __name__ == '__main__':
 				collected_charge_variable_name = variable,
 				number_of_processes = max(multiprocessing.cpu_count()-2,1),
 				use_clean_beta_scan = True,
+				fit_R_squared_threshold_when_aggregating_x_mpv = .94,
 			)
 			collected_charge_in_Coulomb(
 				bureaucrat = bureaucrat,
