@@ -10,6 +10,7 @@ from landaupy import langauss, landau
 from scipy.stats import gaussian_kde, median_abs_deviation
 import warnings
 from scipy.constants import elementary_charge
+import scipy.stats
 import multiprocessing
 import sys
 sys.path.insert(1, '/home/sengerm/scripts_and_codes/repos/robocold_beta_setup/analysis_scripts')
@@ -168,12 +169,14 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 				
 				hist, bin_edges = numpy.histogram(samples_with_signal_and_background, bins='auto', density=False)
 				bin_centers = bin_edges[:-1] + numpy.diff(bin_edges)/2
-				# ~ # Add an extra bin to the left:
+				# Add an extra bin to the left:
 				hist = numpy.insert(hist, 0, sum(samples_with_signal_and_background<bin_edges[0]))
 				bin_centers = numpy.insert(bin_centers, 0, bin_centers[0]-numpy.diff(bin_edges)[0])
 				# Add an extra bin to the right:
 				hist = numpy.append(hist,sum(samples_with_signal_and_background>bin_edges[-1]))
 				bin_centers = numpy.append(bin_centers, bin_centers[-1]+numpy.diff(bin_edges)[0])
+				hist_errors = hist**.5
+				hist_errors[hist_errors==0] = 1
 				
 				def probability_density_model(x, landau_x_mpv, landau_xi, landau_gauss_sigma, signal_to_background_fraction):
 					# This integrated to 1.
@@ -213,17 +216,21 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 					warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 					warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
 					try:
-						result = model.fit(hist, params, x=bin_centers)
+						result = model.fit(data=hist, params=params, x=bin_centers, weights=1/hist_errors)
 						_ = {param_name: result.params[param_name].value for param_name in result.params}
+						# ~ significance = .01
+						# ~ critical_chi = scipy.stats.chi2.ppf(1-significance, result.nfree)
+						# ~ print(f'{bureaucrat.run_name} {variable}, chisqr={result.chisqr:.2e} (ɑ={significance}, Χ_crit={critical_chi:.2e}, {critical_chi>result.chisqr}), R²={result.rsquared} ({result.rsquared>.95})')
 					except Exception as e:
 						warnings.warn(f'Cannot fit signal_name {repr(signal_name)}, variable {repr(variable)}, n_bootstrap {repr(n_bootstrap)}, run {repr(bureaucrat.run_name)}. Reason: {e}')
 						_ = {param_name: numpy.nan for param_name in params}
 				_['signal_name'] = signal_name
 				_['variable'] = scaled_variable_name
 				_['kind_of_data'] = kind_of_data
-				_['fit_R_squared'] = result.rsquared
-				_['fit_chi_squared'] = result.chisqr
-				_['fit_reduced_chi_squared'] = result.redchi
+				_['fit.R_squared'] = result.rsquared
+				_['fit.chi_squared'] = result.chisqr
+				_['fit.reduced_chi_squared'] = result.redchi
+				_['fit.n_free_degrees_of_freedom_for_chi_squared'] = result.nfree
 				params_to_save.append(_)
 				
 				if n_bootstrap == 0 and 'result' in locals(): # Means with real data.
@@ -251,7 +258,7 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 						go.Scatter(
 							x = x_axis/scale_factor_for_comfortable_fit,
 							y = events_count_model(x_axis, **{p:result.params[p].value for p in result.params}),
-							name = f'{signal_name} model (fit R<sup>2</sup>={result.rsquared:.2f})' + '<br>'.join([''] + [f'{PARAMS_LABELS[param_name]}: {int(result.params[param_name].value)}' for param_name in ['n_signal','n_background']]),
+							name = f'{signal_name} model' + '<br>'.join([''] + [f'{PARAMS_LABELS[param_name]}: {int(result.params[param_name].value)}' for param_name in ['n_signal','n_background']]),
 							line = dict(color = line_color, dash='dash'),
 							legendgroup = signal_name,
 						)
@@ -331,7 +338,7 @@ def fit_Landau_and_extract_MPV(bureaucrat:RunBureaucrat, time_from_trigger_backg
 		
 		save_dataframe(df=params_to_save, location=employee.path_to_directory_of_my_task, name='fits_results')
 
-def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_from_trigger_background:dict, time_from_trigger_signal:dict, signal_name_trigger:str, n_bootstraps:int, collected_charge_variable_name:str, force:bool=False, number_of_processes:int=1, use_clean_beta_scan:bool=True, fit_R_squared_threshold_when_aggregating_x_mpv:float=None):
+def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_from_trigger_background:dict, time_from_trigger_signal:dict, signal_name_trigger:str, n_bootstraps:int, collected_charge_variable_name:str, force:bool=False, number_of_processes:int=1, use_clean_beta_scan:bool=True, significance_for_fit_rejection_with_chi_squared_test_when_aggregating_results:float=None):
 	bureaucrat.check_these_tasks_were_run_successfully('beta_scan_sweeping_bias_voltage')
 	
 	with bureaucrat.handle_task(f'fit_Landau_and_extract_MPV_sweeping_voltage_{collected_charge_variable_name.replace(" ","_")}') as employee:
@@ -373,9 +380,10 @@ def fit_Landau_and_extract_MPV_sweeping_voltage(bureaucrat:RunBureaucrat, time_f
 		summarized_data.columns = [' '.join(col) for col in summarized_data.columns]
 		summarized_data.reset_index('device_name',drop=False,inplace=True)
 		
-		if fit_R_squared_threshold_when_aggregating_x_mpv is not None:
-			fits_results = fits_results.query(f'fit_R_squared>={fit_R_squared_threshold_when_aggregating_x_mpv}')
-		
+		if significance_for_fit_rejection_with_chi_squared_test_when_aggregating_results is not None:
+			critical_chi_squared = scipy.stats.chi2.ppf(1-significance_for_fit_rejection_with_chi_squared_test_when_aggregating_results, fits_results['fit.n_free_degrees_of_freedom_for_chi_squared'])
+			fits_results = fits_results.loc[fits_results['fit.chi_squared']<critical_chi_squared]
+			
 		x_mpv = fits_results['landau_x_mpv']
 		x_mpv = x_mpv.groupby(x_mpv.index.names).agg([numpy.nanmean, numpy.nanmedian, numpy.nanstd, kMAD])
 		
@@ -526,14 +534,14 @@ if __name__ == '__main__':
 			fit_Landau_and_extract_MPV_sweeping_voltage(
 				bureaucrat = bureaucrat,
 				time_from_trigger_background = {subrun.run_name:{_:(1e-9,1.5e-9) for _ in SIGNALS_NAMES} for subrun in subruns},
-				time_from_trigger_signal = {subrun.run_name:{_:(1.5e-9,1.83e-9) for _ in SIGNALS_NAMES} for subrun in subruns},
+				time_from_trigger_signal = {subrun.run_name:{_:(1.5e-9,2e-9) for _ in SIGNALS_NAMES} for subrun in subruns},
 				signal_name_trigger = 'MCP-PMT',
 				n_bootstraps = args.n_bootstraps,
 				force = args.force,
 				collected_charge_variable_name = variable,
 				number_of_processes = max(multiprocessing.cpu_count()-2,1),
 				use_clean_beta_scan = True,
-				fit_R_squared_threshold_when_aggregating_x_mpv = .94,
+				significance_for_fit_rejection_with_chi_squared_test_when_aggregating_results = .05,
 			)
 			collected_charge_in_Coulomb(
 				bureaucrat = bureaucrat,

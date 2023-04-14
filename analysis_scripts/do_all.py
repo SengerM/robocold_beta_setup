@@ -41,7 +41,7 @@ def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, path_to_cuts_file:Path
 				collected_charge_variable_name = variable,
 				number_of_processes = number_of_processes,
 				use_clean_beta_scan = True,
-				fit_R_squared_threshold_when_aggregating_x_mpv = .94,
+				significance_for_fit_rejection_with_chi_squared_test_when_aggregating_results = .05,
 			)
 			collected_charge_in_Coulomb(
 				bureaucrat = bureaucrat,
