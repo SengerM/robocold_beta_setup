@@ -241,7 +241,8 @@ def plot_everything_from_beta_scan(bureaucrat:RunBureaucrat, measured_stuff_vs_w
 				x = variables[0],
 				y = variables[1],
 				title = f'Scatter plot<br><sup>{bureaucrat.run_name}</sup>',
-				color = 'signal_name'
+				color = 'signal_name',
+				hover_data = ['n_trigger'],
 			)
 			fig.write_html(
 				str(path_to_save_plots/Path(' '.join(list(variables)).replace(' ','_') + '_scatter_plot.html')),
