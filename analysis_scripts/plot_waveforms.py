@@ -16,7 +16,7 @@ def plot_waveforms(bureaucrat:RunBureaucrat, force:bool=False):
 		return
 	
 	with bureaucrat.handle_task('plot_waveforms') as employee:
-		data = load_whole_dataframe(bureaucrat.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')[['n_waveform']]
+		data = load_whole_dataframe(bureaucrat.path_to_directory_of_task('beta_scan')/'parsed_from_waveforms.sqlite')
 		data = tag_n_trigger_as_background_according_to_the_result_of_clean_beta_scan(bureaucrat, data)
 		
 		waveforms_connection = sqlite3.connect(bureaucrat.path_to_directory_of_task('beta_scan')/'waveforms.sqlite')
@@ -28,21 +28,27 @@ def plot_waveforms(bureaucrat:RunBureaucrat, force:bool=False):
 		)
 		
 		waveforms = waveforms.merge(
-			data.reset_index(drop=False).set_index('n_waveform')[['n_trigger','signal_name']],
+			data.reset_index(drop=False).set_index('n_waveform')[['n_trigger','signal_name','t_50 (s)']],
 			left_index = True,
 			right_index = True,
 		)
+		
+		waveforms['Time (s) corrected'] = waveforms['Time (s)'] - waveforms['t_50 (s)']
 		
 		df = waveforms.reset_index(drop=False).sort_values(['n_waveform','Time (s)'])
 		fig = px.line(
 			title = f'Waveforms<br><sup>{bureaucrat.run_name}</sup>',
 			data_frame = df,
-			x = 'Time (s)',
+			x = 'Time (s) corrected',
 			y = 'Amplitude (V)',
 			facet_row = 'signal_name',
 			line_group = 'n_waveform',
+			labels = {
+				'Time (s) corrected': 'Time (s)',
+			},
 		)
 		fig.update_traces(opacity=.1)
+		fig.update_xaxes(range = [-8e-9,8e-9])
 		fig.update_yaxes(matches=None)
 		fig.write_image(
 			employee.path_to_directory_of_my_task/'signal_waveforms_plotly.pdf',
@@ -94,7 +100,7 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	bureaucrat = RunBureaucrat(Path(args.directory))
-	plot_waveforms_sweeping_bias_voltage(
+	plot_waveforms(
 		bureaucrat, 
 		force = args.force,
 	)
