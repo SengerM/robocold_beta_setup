@@ -11,6 +11,7 @@ from events_rate import events_rate_vs_bias_voltage
 from plot_beta_scan import script_core as plot_beta_scan
 import multiprocessing
 import grafica.plotly_utils.utils
+from plot_waveforms import plot_waveforms_sweeping_bias_voltage
 
 def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, path_to_cuts_file:Path=None, skip_charge:bool=False, skip_jitter:bool=False, force:bool=True, number_of_processes:int=1):
 	_ = set(CFD_thresholds)
@@ -23,6 +24,7 @@ def do_all(bureaucrat:RunBureaucrat, CFD_thresholds:dict, path_to_cuts_file:Path
 	summarize_parameters(bureaucrat, force=force)
 	IV_curve_from_beta_scan_data(bureaucrat)
 	events_rate_vs_bias_voltage(bureaucrat, force=force, number_of_processes=number_of_processes)
+	plot_waveforms_sweeping_bias_voltage(bureaucrat, force=force)
 	if not skip_charge:
 		subruns = list(bureaucrat.list_subruns_of_task('beta_scan_sweeping_bias_voltage'))
 		
@@ -119,7 +121,7 @@ if __name__ == '__main__':
 	do_all(
 		bureaucrat,
 		path_to_cuts_file = path_to_cuts_file,
-		skip_charge = True,
+		skip_charge = False,
 		skip_jitter = False,
 		CFD_thresholds = {DUT_SIGNAL_NAME: 'best', 'MCP-PMT': 20},
 		force = args.force,
