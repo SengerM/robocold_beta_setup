@@ -42,11 +42,7 @@ def fit_gaussian_to_samples(samples, bins='auto', nan_policy='drop'):
 def resample_measured_data(data_df):
 	"""Produce a new sample of `data_df` using the value of `n_trigger`
 	to group rows. Returns a new data frame of the same size."""
-	resampled_df = data_df.reset_index(drop=False).pivot(
-		index = 'n_trigger',
-		columns = 'signal_name',
-		values = list(set(data_df.columns)),
-	)
+	resampled_df = data_df.unstack('signal_name')
 	resampled_df = resampled_df.sample(frac=1, replace=True)
 	resampled_df = resampled_df.stack()
 	return resampled_df
@@ -285,7 +281,7 @@ def jitter_calculation_beta_scan(bureaucrat:RunBureaucrat, CFD_thresholds, force
 				df = data_df.copy()
 			else:
 				df = resample_measured_data(data_df)
-
+			
 			Δt_df = calculate_Δt(df)
 			Δt_df.index = Δt_df.index.droplevel('n_trigger')
 			jitter_vs_kCFD = Δt_df.groupby(level=Δt_df.index.names).agg(func=sigma_from_gaussian_fit)
